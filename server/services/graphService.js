@@ -134,55 +134,72 @@ class GraphService {
                 const dbUnions = await Union.find({ partnerIds: id });
                 foundUnions = dbUnions.map(u => u.toObject());
 
-                // B) Legacy Fallback (Only if absolutely no union found in DB, try to infer)
-                // Since we now search DB by partnerIds, this fallback is rarely needed unless data is very old/migrated without unions.
-                if (foundUnions.length === 0 && (person.spouse?.length > 0 || person.children?.length > 0)) {
-                     // Get all children docs to check their parents
-                     const childDocs = person.children && person.children.length > 0 
-                        ? await Person.find({ _id: { $in: person.children } })
-                        : [];
+                // B) Virtual Union Creation (ALWAYS for systems without DB Unions)
+                // Get all children docs by querying the DB directly for parentRefs
+                // This avoids relying on the potentially out-of-sync 'children' array on the person doc
+                const childDocs = await Person.find({
+                    $or: [
+                        { 'parentRefs.parentId': id },
+                        { 'parents': id }
+                    ]
+                });
 
-                     // 1. Group children by partner
-                     // Map <PartnerId | 'unknown'> -> [ChildId]
-                     const childrenByPartner = new Map();
-                     
-                     for (let child of childDocs) {
-                         const parents = (child.parents || []).map(p => p.toString());
-                         const otherParent = parents.find(p => p !== id);
-                         const key = otherParent || 'unknown';
-                         if (!childrenByPartner.has(key)) childrenByPartner.set(key, []);
-                         childrenByPartner.get(key).push(child._id.toString());
-                     }
+                // 1. Group children by partner
+                // Map <PartnerId | 'unknown'> -> [ChildId]
+                const childrenByPartner = new Map();
+                
+                for (let child of childDocs) {
+                    const parents = [];
+                    if (child.parentRefs && child.parentRefs.length > 0) {
+                        child.parentRefs.forEach(ref => parents.push(ref.parentId.toString()));
+                    } else if (child.parents && child.parents.length > 0) {
+                        child.parents.forEach(p => parents.push(p.toString()));
+                    }
 
-                     // 2. Ensure all spouses have a union entry even if no children
-                     const spouseIds = (person.spouse || []).map(s => s.toString());
-                     for (let sId of spouseIds) {
-                         if (!childrenByPartner.has(sId)) {
-                             childrenByPartner.set(sId, []);
-                         }
-                     }
+                    const otherParent = parents.find(p => p !== id);
+                    const key = otherParent || 'unknown';
+                    if (!childrenByPartner.has(key)) childrenByPartner.set(key, []);
+                    childrenByPartner.get(key).push(child._id.toString());
+                }
 
-                     // 3. Create Virtual Unions
-                     for (let [partnerKey, kids] of childrenByPartner) {
-                         const partnerId = partnerKey === 'unknown' ? null : partnerKey;
-                         
-                         // Double Check: Did we really miss a union?
-                         // (Should be covered by A, but redundant check is safe)
-                         
-                         // Create virtual
-                         const vId = partnerId 
-                            ? `v-${[id, partnerId].sort().join('-')}` 
-                            : `v-${id}-unknown`;
-                         
-                         foundUnions.push({
-                             _id: vId,
-                             partnerIds: partnerId ? [id, partnerId] : [id],
-                             childrenIds: kids,
-                             kind: 'union',
-                             generation: gen,
-                             isVirtual: true
-                         });
-                     }
+                // 2. Ensure all spouses have a union entry even if no children
+                const spouseIds = (person.spouse || []).map(s => s.toString());
+                for (let sId of spouseIds) {
+                    if (!childrenByPartner.has(sId)) {
+                        childrenByPartner.set(sId, []);
+                    }
+                }
+
+                // 3. Create Virtual Unions (merge with DB unions if any)
+                for (let [partnerKey, kids] of childrenByPartner) {
+                    const partnerId = partnerKey === 'unknown' ? null : partnerKey;
+                    
+                    // Create virtual
+                    const vId = partnerId 
+                       ? `v-${[id, partnerId].sort().join('-')}` 
+                       : `v-${id}-unknown`;
+                    
+                    // Check if DB already has this union
+                    const existingDbUnion = foundUnions.find(u => {
+                        const pIds = (u.partnerIds || []).map(String).sort();
+                        const searchPIds = partnerId ? [id, partnerId].map(String).sort() : [id];
+                        return searchPIds.length === pIds.length && searchPIds.every((v, i) => v === pIds[i]);
+                    });
+
+                    if (existingDbUnion) {
+                        // Merge children into DB union (DB might be out of sync)
+                        existingDbUnion.childrenIds = [...new Set([...(existingDbUnion.childrenIds || []).map(String), ...kids])];
+                    } else {
+                        // Create new virtual union
+                        foundUnions.push({
+                            _id: vId,
+                            partnerIds: partnerId ? [id, partnerId] : [id],
+                            childrenIds: kids,
+                            kind: 'union',
+                            generation: gen,
+                            isVirtual: true
+                        });
+                    }
                 }
 
                 
@@ -191,25 +208,55 @@ class GraphService {
                 const processedCouples = new Set();
 
                 // Pre-populate with existing unions in the global map
+                // AND build a set of persons who are already in a couple globally
+                const globalCoupledPersons = new Set();
+
                 for (let existingU of unions.values()) {
                     if (existingU.partnerIds && existingU.partnerIds.length >= 1) {
                         const pIds = existingU.partnerIds.map(String).sort();
                         const key = pIds.length > 1 ? pIds.join('-') : `single-${pIds[0]}`;
                         processedCouples.add(key);
+
+                        if (pIds.length > 1) {
+                            pIds.forEach(p => globalCoupledPersons.add(p));
+                        }
                     }
                 }
 
-                for (let u of foundUnions) {
-                    if (unions.has(u._id.toString())) continue;
+                // Also identify persons coupled in the CURRENT batch of foundUnions
+                const batchCoupledPersons = new Set();
+                foundUnions.forEach(u => {
+                    if (u.partnerIds && u.partnerIds.length > 1) {
+                        u.partnerIds.forEach(p => batchCoupledPersons.add(p.toString()));
+                    }
+                });
 
-                    // SEMANTIC DEDUPLICATION
-                    // Check if we already have a union for this couple
+                console.log(`[GraphService] Processing ${foundUnions.length} unions for ${person.firstName}. CoupleSet: ${Array.from(batchCoupledPersons)}`);
+
+                for (let u of foundUnions) {
+                    const uIdStr = u._id.toString();
+                    if (unions.has(uIdStr)) continue;
+
+                    // 1. FILTER: Single vs Couple Priority
+                    // If u is a Single Node Union, but the person is in a Couple (Global or Batch), SKIP IT.
+                    // This eliminates "connected to unknown" ghost nodes when a real partner exists.
+                    if (u.partnerIds && u.partnerIds.length === 1) {
+                        const pid = u.partnerIds[0].toString();
+                        if (globalCoupledPersons.has(pid) || batchCoupledPersons.has(pid)) {
+                            console.log(`[GraphService] Skipping Ghost Union ${uIdStr} for ${pid} because couple exists.`);
+                            continue; // Skip ghost single union
+                        }
+                    }
+
+                    // 2. SEMANTIC DEDUPLICATION (Exact Match)
+                    // Check if we already have a union for this couple key
                     let isDuplicate = false;
                     if (u.partnerIds && u.partnerIds.length >= 1) {
                          const pIds = u.partnerIds.map(String).sort();
                          const key = pIds.length > 1 ? pIds.join('-') : `single-${pIds[0]}`;
                          if (processedCouples.has(key)) {
                              isDuplicate = true;
+                             console.log(`[GraphService] Skipping Duplicate Union ${uIdStr} (Key: ${key})`);
                          } else {
                              processedCouples.add(key);
                          }
@@ -217,9 +264,12 @@ class GraphService {
 
                     if (isDuplicate) continue;
 
-                    unions.set(u._id.toString(), {
+                    // Log the Union to be added
+                    console.log(`[GraphService] Adding Union ${uIdStr} Kind: ${u.kind} Children: ${u.childrenIds?.length || 0}`);
+
+                    unions.set(uIdStr, {
                         ...u, 
-                         _id: u._id.toString(),
+                         _id: uIdStr,
                          generation: gen, 
                          kind: 'union'
                     });
@@ -255,6 +305,8 @@ class GraphService {
      * Smart grouping by "Family Unit" to avoid crossing lines.
      */
     static computeLayout(nodes, unions) {
+        console.log(`[GraphLayout] Computing layout for ${nodes.length} nodes and ${unions.length} unions.`);
+        
         // 1. Group by Generation
         const layers = {};
         
@@ -276,6 +328,7 @@ class GraphService {
         // 2. Sort & Position
         Object.keys(layers).sort((a,b) => a-b).forEach(gen => {
             const items = layers[gen];
+            console.log(`[GraphLayout] Gen ${gen}: ${items.length} items`);
             
             // --- NEW SORT STRATEGY: GROUP COUPLES ---
             // 1. Seperate Persons and Unions
@@ -299,6 +352,7 @@ class GraphService {
                 
                 ordered.push(person);
                 visited.add(person._id.toString());
+                console.log(`[GraphLayout]   Placed Person: ${person.firstName} ${person.lastName} (${person._id})`);
 
                 // Find all unions for this person in this layer
                 const myUnions = layerUnions.filter(u => u.partnerIds.map(String).includes(person._id.toString()));
@@ -316,17 +370,14 @@ class GraphService {
                             // Add Union
                             ordered.push(u);
                             visited.add(u._id.toString());
+                            console.log(`[GraphLayout]     -> Bound Union: ${u._id}`);
                             // Recurse on Partner to continue the chain
                             addToChain(partner);
                         } else {
                             // Partner already visited? This means a cycle or we are closing a loop.
-                            // Just add the union to connect them visually?
-                            // Actually if partner is visited, we might need to inject 'u' between them? 
-                            // Complex. For tree, cycles are rare. Assume linear.
-                            // If partner is already in 'ordered', maybe we can't place 'u' next to both.
-                            // Skip 'u' for placement to avoid jumping, OR append it here.
                             ordered.push(u);
                             visited.add(u._id.toString());
+                            console.log(`[GraphLayout]     -> Bound Union (Loop): ${u._id} to ${partner.firstName}`);
                         }
                     } 
                     // CASE B: Single Parent Union (P1 - U - [Unknown])
@@ -334,6 +385,7 @@ class GraphService {
                         // Just add the union next to P1
                         ordered.push(u);
                         visited.add(u._id.toString());
+                        console.log(`[GraphLayout]     -> Bound Union (Single/Internal): ${u._id}`);
                     }
                 });
             };
