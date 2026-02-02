@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, LogOut, RefreshCw, TreeDeciduous } from 'lucide-react';
+import { User, Plus, Trash2, LogOut, RefreshCw, TreeDeciduous, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
@@ -43,6 +43,12 @@ function TreeView() {
 
   const initiateAddChild = (person) => {
     setPendingRelation({ type: 'child', personId: person._id });
+    setSelectedPerson(null);
+    setShowModal(true);
+  };
+
+  const initiateAddSibling = (person) => {
+    setPendingRelation({ type: 'sibling', personId: person._id });
     setSelectedPerson(null);
     setShowModal(true);
   };
@@ -91,9 +97,37 @@ function TreeView() {
         await personService.update(child._id, {
             parents: JSON.stringify(updatedParentIds) 
         });
+      } else if (pendingRelation?.type === 'sibling') {
+        const currentPerson = persons.find(p => p._id === pendingRelation.personId);
+        let parentIds = (currentPerson.parents || []).map(p => 
+             (p && typeof p === 'object' && p._id) ? p._id : p
+        );
+
+        // If root node (no parents), create a dummy parent to link siblings
+        if (parentIds.length === 0) {
+            const dummyParentRes = await personService.create({
+                firstName: '?', 
+                lastName: '?', 
+                gender: 'other', 
+                notes: 'Generato automaticamente per collegare fratelli' 
+            });
+            const dummyParent = dummyParentRes.data;
+            parentIds = [dummyParent._id];
+
+            // 1. Link current person to the dummy parent
+            await personService.update(currentPerson._id, {
+                parents: JSON.stringify(parentIds)
+            });
+        }
+
+        // 2. Create the new sibling linked to same parents
+        const payload = { ...formData, parentIds: JSON.stringify(parentIds) };
+        await personService.create(payload);
       } else {
         await personService.create(formData);
       }
+      setShowModal(false);
+      loadPersons();
       setShowModal(false);
       loadPersons();
     } catch (error) {
@@ -182,7 +216,7 @@ function TreeView() {
 
   const NodeCard = ({ person, isPartner }) => (
         <div className="node-card" style={isPartner ? { borderColor: '#fca5a5' } : {}}>
-            {/* Add Parent Button - Only for Primary node to avoid confusion or allow adding parents to partner too? Let's allow only on primary for now to keep tree simple */}
+            {/* Add Parent Button */}
             {!isPartner && (
             <button 
                 className="btn-add-parent"
@@ -218,7 +252,12 @@ function TreeView() {
                     </button>
                 </div>
             </div>
-
+{!isPartner && (
+                        <button onClick={(e) => { e.stopPropagation(); initiateAddSibling(person); }} className="text-gray-400 hover:text-amber-500" title="Aggiungi Fratello/Sorella">
+                            <Users size={14} />
+                        </button>
+                    )}
+                    
             {/* Add Child Button */}
             {!isPartner && (
             <button 
