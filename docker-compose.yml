@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3060:3060"
+    environment:
+      - NODE_ENV=production
+      - PORT=3060
+      - MONGODB_URI=mongodb://mongo:27017/genealogical-tree
+    depends_on:
+      - mongo
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - genealogy-network
+
+  mongo:
+    image: mongo:6
+    ports:
+      - "27017:27017" # Optional access from host
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - genealogy-network
+
+volumes:
+  mongo-data:
+
+networks:
+  genealogy-network:
+    driver: bridge

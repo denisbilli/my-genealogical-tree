@@ -36,6 +36,7 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Registration Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
