@@ -205,11 +205,32 @@ function TreeView() {
     // We only want children that belong to THIS couple if we were strict, but for simplicity, we show all children of the primary person.
     // If we want to show shared children, we check if child has parentId.
     
-    const children = persons.filter(p => 
-      p.parents && p.parents.some(parent => 
-        (typeof parent === 'object' ? parent._id : parent) === personId
-      )
-    );
+    const children = persons.filter(child => {
+        // 1. Must be a child of current person
+        const isChild = child.parents && child.parents.some(parent => 
+            (typeof parent === 'object' ? parent._id : parent) === personId
+        );
+        if (!isChild) return false;
+
+        // 2. CHILD DEDUPLICATION LOGIC
+        // Only render this child if the current 'personId' is the "Owner" of the child.
+        // Owner is defined as the parent with the lowest ID (deterministic tie-breaker).
+        // This ensures recursive sub-trees (descendants) are only rendered ONCE in the entire forest,
+        // specifically attached to the parent with the lowest ID.
+        
+        let parentIds = child.parents.map(p => typeof p === 'object' ? p._id : p);
+        if (parentIds.length > 1) {
+            parentIds.sort(); // Sort alpha-numerically
+            const ownerId = parentIds[0];
+            if (ownerId !== personId) {
+                // I am not the owner (my partner is likely the owner).
+                // Do not render this child here. It will be rendered in my partner's tree.
+                return false;
+            }
+        }
+        
+        return true;
+    });
 
     return (
       <div className="tree-node">
@@ -323,12 +344,16 @@ function TreeView() {
       // Check partners
       const partners = getPartners(p._id);
 
-      // Rule: If I have ANY partner who HAS parents, they are the anchor for this couple in the tree.
-      // I should NOT be a root node, I will appear attached to them.
-      const hasPartnerWithParents = partners.some(part => part.parents && part.parents.length > 0);
-      if (hasPartnerWithParents) {
-          return false;
-      }
+      // Rule: Deduplication via ID Ownership at root level?
+      // If I am a Root, and my Partner is a Root. Only one renders. (Handled below)
+      
+      // If I am a Root, and my Partner is NOT a Root.
+      // Usually that means my Partner has parents, so my Partner is in another tree.
+      // If I render myself here, I start a new tree.
+      // This is desirable if I have other children.
+      // It is duplicated if "my tree" only consists of me + partner + shared kids (which are in the other tree).
+      // But we can't easily know that.
+      // So allow rendering.
 
       // If neither of us have parents (both are roots), we need a tie-breaker to avoid showing the couple twice (once for me, once for partner).
       // Only render if my ID is smaller than all my root partners' IDs.
