@@ -289,52 +289,71 @@ class GraphService {
                 return dateA - dateB;
             });
 
-            // 3. Build Ordered List respecting Couples
+            // 3. Build Ordered List respecting Couples & Chains (Remarriages)
             const ordered = [];
             const visited = new Set();
 
-            persons.forEach(p => {
-                if (visited.has(p._id.toString())) return;
+            // Helper to recursively add a chain of partners (P1 - U1 - P2 - U2 - P3...)
+            const addToChain = (person) => {
+                if (visited.has(person._id.toString())) return;
                 
-                // Add Person
-                ordered.push(p);
-                visited.add(p._id.toString());
+                ordered.push(person);
+                visited.add(person._id.toString());
 
-                // Find Partner in THIS layer?
-                // Look for unions connecting this person to another in this layer
-                const myUnions = layerUnions.filter(u => u.partnerIds.map(String).includes(p._id.toString()));
+                // Find all unions for this person in this layer
+                const myUnions = layerUnions.filter(u => u.partnerIds.map(String).includes(person._id.toString()));
                 
                 myUnions.forEach(u => {
-                    // Start Union immediately after person? 
-                    // No, usually P1 - Union - P2
-                    // But we push Union object later? No, we need it in the list for X calc.
-                    
-                    // Find Partner
-                    const partnerId = u.partnerIds.find(id => String(id) !== String(p._id));
+                    if (visited.has(u._id.toString())) return; 
+
+                    // Find the "Other" partner
+                    const partnerId = u.partnerIds.find(id => String(id) !== String(person._id));
                     const partner = persons.find(px => String(px._id) === String(partnerId));
 
-                    if (partner && !visited.has(partner._id.toString())) {
-                        // Add Union
+                    // CASE A: Standard Couple (P1 - U - P2)
+                    if (partner) {
+                        if (!visited.has(partner._id.toString())) {
+                            // Add Union
+                            ordered.push(u);
+                            visited.add(u._id.toString());
+                            // Recurse on Partner to continue the chain
+                            addToChain(partner);
+                        } else {
+                            // Partner already visited? This means a cycle or we are closing a loop.
+                            // Just add the union to connect them visually?
+                            // Actually if partner is visited, we might need to inject 'u' between them? 
+                            // Complex. For tree, cycles are rare. Assume linear.
+                            // If partner is already in 'ordered', maybe we can't place 'u' next to both.
+                            // Skip 'u' for placement to avoid jumping, OR append it here.
+                            ordered.push(u);
+                            visited.add(u._id.toString());
+                        }
+                    } 
+                    // CASE B: Single Parent Union (P1 - U - [Unknown])
+                    else {
+                        // Just add the union next to P1
                         ordered.push(u);
-                        // Add Partner
-                        ordered.push(partner);
-                        visited.add(partner._id.toString());
                         visited.add(u._id.toString());
-                    } else if (!visited.has(u._id.toString())) {
-                         // Partner already visited or not in layer (shouldn't happen for couple layout)
-                         // Just add union if not visited (e.g. single parent union? or partner in other layer? unlikely)
-                         ordered.push(u);
-                         visited.add(u._id.toString());
                     }
                 });
+            };
+
+            // Iterate sorted persons to Seed chains
+            persons.forEach(p => {
+                addToChain(p);
             });
 
-            // Add any remaining orphans (unions or persons)
+            // Add any remaining orphans (unions that might have been missed? Unlikely)
             items.forEach(i => {
                 if (!visited.has(i._id.toString())) {
                     ordered.push(i);
                 }
             });
+
+            // Clean up: Filter out "Single" unions if the person is also in a "Couple" union?
+            // Heuristic Strategy:
+            // If the sequence is [P1, U_single, U_couple, P2] -> Remove U_single?
+            // Let's rely on the user seeing them and deleting them, layout just places them nicely now.
 
             // Center alignment
             const totalWidth = ordered.length * this.X_SPACING;
@@ -347,11 +366,15 @@ class GraphService {
 
                 // Adjust for Union: STRICT CENTER
                 if (item.kind === 'union') {
+                    // Find partners in the `ordered` list (they are strictly close now due to chain logic)
                     const p1 = ordered.find(x => x._id === item.partnerIds[0]?.toString());
                     const p2 = ordered.find(x => x._id === item.partnerIds[1]?.toString());
-                    // Only adjust if both partners are in this layer and ordered
+                    
                     if (p1 && p2) {
                         item.x = (p1.x + p2.x) / 2;
+                    } else if (p1) {
+                         // Single parent union: Place slightly offset to right of parent
+                         item.x = p1.x + (this.X_SPACING / 2);
                     }
                 }
 
