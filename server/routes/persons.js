@@ -73,10 +73,25 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
       personData.photoUrl = `/uploads/${req.file.filename}`;
     }
 
+    if (req.body.spouse) {
+        try {
+            personData.spouse = JSON.parse(req.body.spouse);
+        } catch (e) {
+            // Keep as is if not json list
+        }
+    }
+
     const person = new Person(personData);
     await person.save();
 
     // Update relationships if provided
+    if (personData.spouse && Array.isArray(personData.spouse)) {
+         await Person.updateMany(
+            { _id: { $in: personData.spouse }, userId: req.userId },
+            { $addToSet: { spouse: person._id } }
+         );
+    }
+
     if (req.body.parentIds) {
       const parentIds = JSON.parse(req.body.parentIds);
       person.parents = parentIds;
@@ -127,6 +142,11 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
          updateData.children = JSON.parse(updateData.children);
        } catch (e) { console.error("Error parsing children", e); }
     }
+    if (updateData.spouse) {
+       try {
+         updateData.spouse = JSON.parse(updateData.spouse);
+       } catch (e) { console.error("Error parsing spouse", e); }
+    }
 
     Object.assign(person, updateData);
     await person.save();
@@ -144,6 +164,13 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
          await Person.updateMany(
             { _id: { $in: updateData.children }, userId: req.userId },
             { $addToSet: { parents: person._id } }
+         );
+    }
+    // If we added spouse to THIS person, ensure spouse has THIS person in spouse
+    if (updateData.spouse && Array.isArray(updateData.spouse)) {
+         await Person.updateMany(
+            { _id: { $in: updateData.spouse }, userId: req.userId },
+            { $addToSet: { spouse: person._id } }
          );
     }
 

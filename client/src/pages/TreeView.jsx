@@ -53,6 +53,12 @@ function TreeView() {
     setShowModal(true);
   };
 
+  const initiateAddPartner = (person) => {
+    setPendingRelation({ type: 'partner', personId: person._id });
+    setSelectedPerson(null);
+    setShowModal(true);
+  };
+
   const initiateEdit = (person) => {
     setPendingRelation({ type: 'edit', personId: person._id });
     setSelectedPerson(person);
@@ -97,6 +103,20 @@ function TreeView() {
         await personService.update(child._id, {
             parents: JSON.stringify(updatedParentIds) 
         });
+      } else if (pendingRelation?.type === 'partner') {
+         const payload = { ...formData, spouse: JSON.stringify([pendingRelation.personId]) };
+         // 1. Create Partner
+         const newPartnerRes = await personService.create(payload);
+         const newPartner = newPartnerRes.data;
+         
+         // 2. Update Current Person
+         const currentPerson = persons.find(p => p._id === pendingRelation.personId);
+         const currentSpouses = (currentPerson.spouse || []).map(p => 
+            (p && typeof p === 'object' && p._id) ? p._id : p
+         );
+         await personService.update(currentPerson._id, {
+             spouse: JSON.stringify([...currentSpouses, newPartner._id])
+         });
       } else if (pendingRelation?.type === 'sibling') {
         const currentPerson = persons.find(p => p._id === pendingRelation.personId);
         let parentIds = (currentPerson.parents || []).map(p => 
@@ -137,17 +157,28 @@ function TreeView() {
   };
 
 
-  // Find partners: people who are co-parents of this person's children
+  // Find partners: people who are co-parents of this person's children OR explicitly listed as spouse
   const getPartners = (personId) => {
-    // 1. Find all children of personId
+    const person = persons.find(p => p._id === personId);
+    if (!person) return [];
+
+    const partnerIds = new Set();
+    
+    // 1. Explicit spouses
+    if (person.spouse) {
+        person.spouse.forEach(s => {
+             partnerIds.add(typeof s === 'object' ? s._id : s);
+        });
+    }
+
+    // 2. Find all children of personId
     const children = persons.filter(p => 
         p.parents && p.parents.some(parent => 
             (typeof parent === 'object' ? parent._id : parent) === personId
         )
     );
 
-    // 2. For these children, find OTHER parents
-    const partnerIds = new Set();
+    // 3. For these children, find OTHER parents
     children.forEach(child => {
         if (!child.parents) return;
         child.parents.forEach(p => {
@@ -222,6 +253,17 @@ function TreeView() {
                 className="btn-add-parent"
                 onClick={(e) => { e.stopPropagation(); initiateAddParent(person); }}
                 title="Aggiungi Genitore"
+            >
+                <Plus size={14} />
+            </button>
+            )}
+
+            {/* Add Partner Button */}
+            {!isPartner && (
+            <button 
+                className="btn-add-partner"
+                onClick={(e) => { e.stopPropagation(); initiateAddPartner(person); }}
+                title="Aggiungi Partner"
             >
                 <Plus size={14} />
             </button>
