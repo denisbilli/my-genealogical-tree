@@ -17,6 +17,40 @@ function TreeView() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
 
+  // Helper to calculate graph bounds for centering
+  const getGraphBounds = () => {
+      if (!treeLayout.nodes || treeLayout.nodes.length === 0) {
+          return { width: 800, height: 600, minX: -400, minY: -300 }; // Default dummy bounds
+      }
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      treeLayout.nodes.forEach(node => {
+          if (node.x < minX) minX = node.x;
+          if (node.x > maxX) maxX = node.x;
+          if (node.y < minY) minY = node.y;
+          if (node.y > maxY) maxY = node.y;
+      });
+
+      // Add padding (node width aprox 250, height 100)
+      const paddingX = 400; 
+      const paddingY = 300;
+
+      return {
+          minX: minX - paddingX,
+          maxX: maxX + paddingX,
+          minY: minY - paddingY,
+          maxY: maxY + paddingY,
+          width: (maxX - minX) + (paddingX * 2),
+          height: (maxY - minY) + (paddingY * 2)
+      };
+  };
+
+  const bounds = getGraphBounds();
+
   // On mount, load list of persons
   useEffect(() => {
     console.log("TreeView Mounted");
@@ -209,12 +243,18 @@ function TreeView() {
           const to = nodeMap.get(edge.to);
           if (!from || !to) return null;
 
+          // Shift coordinates to be relative to Bounds top-left
+          const fx = from.x - bounds.minX;
+          const fy = from.y - bounds.minY;
+          const tx = to.x - bounds.minX;
+          const ty = to.y - bounds.minY;
+
           let pathD = '';
           if (edge.type === 'partner') {
-              pathD = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+              pathD = `M ${fx} ${fy} L ${tx} ${ty}`;
           } else {
-              const midY = (from.y + to.y) / 2;
-              pathD = `M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`;
+              const midY = (fy + ty) / 2;
+              pathD = `M ${fx} ${fy} C ${fx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`;
           }
 
           return (
@@ -271,11 +311,10 @@ function TreeView() {
          ) : (
             <TransformWrapper
                 initialScale={1}
-                minScale={0.5}
+                minScale={0.2}
                 maxScale={2}
-                centerOnInit={false}
+                centerOnInit={true}
                 limitToBounds={false}
-                wheel={{ step: 0.1 }}
             >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                     <React.Fragment>
@@ -283,40 +322,20 @@ function TreeView() {
                             <button onClick={() => zoomIn()} className="p-2 hover:bg-gray-200 rounded text-gray-700">+</button>
                             <button onClick={() => zoomOut()} className="p-2 hover:bg-gray-200 rounded text-gray-700">-</button>
                             <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700">R</button>
-                            <div className="text-xs text-gray-500 p-2 border-t">
-                                Nodes: {treeLayout.nodes?.length || 0}<br/>
-                                Edges: {treeLayout.edges?.length || 0}
-                            </div>
                         </div>
                         
                         <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
-                            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                                {/* Center Anchor: Moves origin to center of viewport */}
-                                <div style={{ 
-                                    position: 'absolute', 
-                                    top: '50%', 
-                                    left: '50%', 
-                                    width: 0, 
-                                    height: 0, 
-                                    overflow: 'visible' 
-                                }}>
-                                     {/* Center Marker for Debug */}
-                                     <div style={{ 
-                                        position: 'absolute', 
-                                        width: 10, height: 10, 
-                                        backgroundColor: 'red', 
-                                        borderRadius: '50%', 
-                                        transform: 'translate(-50%, -50%)',
-                                        zIndex: 1000
-                                     }} />
-
-                                     <svg style={{ position: 'absolute', overflow: 'visible', top: 0, left: 0 }}>
+                            {/* Render using calculated specific bounds */}
+                            <div style={{ position: 'relative', width: bounds.width, height: bounds.height }}>
+                                     
+                                     <svg style={{ position: 'absolute', overflow: 'visible', top: 0, left: 0, width: '100%', height: '100%' }}>
                                         {renderEdges()}
                                      </svg>
                                      {treeLayout.nodes.map(node => (
                                         <NodeCard 
                                             key={node._id} 
-                                            node={node} 
+                                            // Pass modified coordinates shifted by bounds
+                                            node={{ ...node, x: node.x - bounds.minX, y: node.y - bounds.minY }}
                                             onAddParent={initiateAddParent}
                                             onAddPartner={initiateAddPartner}
                                             onAddSibling={initiateAddSibling}
@@ -325,7 +344,6 @@ function TreeView() {
                                             onDelete={deletePerson}
                                         />
                                      ))}
-                                </div>
                             </div>
                         </TransformComponent>
                     </React.Fragment>
