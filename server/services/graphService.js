@@ -107,14 +107,19 @@ class GraphService {
             // --- UP (Ancestors) ---
             // Look at parentRefs -> Fetch parents
             if (dir === 'both' || dir === 'up') {
-                if (person.parentRefs) {
-                     for (let ref of person.parentRefs) {
-                         // Find layout parents
-                         queue.push({ id: ref.parentId.toString(), gen: gen - 1, dir: 'up' });
-                         
-                         // We also need the Union between these parents if it exists, to draw the Edge
-                         // Optimization: Unions are usually fetched when we visit the parents
-                     }
+                const parentsToVisit = [];
+
+                // 1. New Schema
+                if (person.parentRefs && person.parentRefs.length > 0) {
+                     person.parentRefs.forEach(ref => parentsToVisit.push(ref.parentId));
+                }
+                // 2. Legacy Schema Fallback
+                else if (person.parents && person.parents.length > 0) {
+                     person.parents.forEach(p => parentsToVisit.push(p));
+                }
+
+                for (let pId of parentsToVisit) {
+                     queue.push({ id: pId.toString(), gen: gen - 1, dir: 'up' });
                 }
             }
 

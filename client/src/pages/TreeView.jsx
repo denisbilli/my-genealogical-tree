@@ -309,6 +309,14 @@ function TreeView() {
            <span>Heritg.org</span>
         </div>
         <div className="flex items-center gap-4">
+             {persons.length > 0 && (
+                <button 
+                  onClick={() => { setSelectedPerson(null); setPendingRelation(null); setShowModal(true); }}
+                  className="btn btn-primary text-xs"
+                >
+                  <Plus size={16} /> Nuova Persona
+                </button>
+             )}
              <span className="text-sm font-medium">Ciao, {user?.fullName || 'Utente'}</span>
              <button onClick={handleLogout} className="btn btn-danger p-2 rounded-full" title="Logout">
                 <LogOut size={20} />
@@ -319,6 +327,16 @@ function TreeView() {
       <main className="tree-wrapper flex-1 overflow-hidden" style={{ cursor: 'grab' }}>
          {loading ? (
              <div className="flex items-center justify-center w-full h-full">Caricamento...</div>
+         ) : persons.length === 0 ? (
+            <div className="flex flex-col items-center justify-center w-full h-full gap-4">
+                <p className="text-gray-500 mb-2">Non ci sono ancora persone nel tuo albero.</p>
+                <button 
+                  onClick={() => { setSelectedPerson(null); setPendingRelation(null); setShowModal(true); }}
+                  className="btn btn-primary"
+                >
+                  <Plus size={20} /> Aggiungi la prima persona
+                </button>
+            </div>
          ) : (
             <TransformWrapper
                 initialScale={0.8}
