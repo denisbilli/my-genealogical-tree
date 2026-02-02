@@ -242,6 +242,18 @@ router.delete('/:id', auth, apiLimiter, async (req, res) => {
   }
 });
 
+// Reset Database (Delete all persons and unions for this user)
+router.post('/reset', auth, async (req, res) => {
+    try {
+        await Person.deleteMany({ userId: req.userId });
+        await Union.deleteMany({ userId: req.userId });
+        res.json({ message: 'Database reset successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+
+
 // Add relationship (parent, child, spouse)
 router.post('/:id/relationship', auth, apiLimiter, async (req, res) => {
   try {

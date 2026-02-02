@@ -76,6 +76,22 @@ function Dashboard() {
     }
   };
 
+  const handleResetDB = async () => {
+    if (window.confirm('⚠️ WARNING: This will delete ALL persons and relationships.\nType "RESET" to confirm.')) {
+        const confirm = window.prompt("Type 'RESET' to wipe the database:");
+        if (confirm === 'RESET') {
+            try {
+                await personService.resetParams();
+                alert('Database reset complete.');
+                loadPersons();
+            } catch (error) {
+                console.error('Reset failed:', error);
+                alert('Reset failed.');
+            }
+        }
+    }
+  };
+
   return (
     <div>
       <nav className="navbar">
@@ -91,9 +107,18 @@ function Dashboard() {
       <div className="dashboard">
         <div className="dashboard-header">
           <h2>Family Members</h2>
-          <button className="btn" onClick={handleAddPerson}>
-            Add New Person
-          </button>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button 
+                className="btn" 
+                style={{ backgroundColor: '#dc3545' }}
+                onClick={handleResetDB}
+            >
+                Reset Database
+            </button>
+            <button className="btn" onClick={handleAddPerson}>
+                Add New Person
+            </button>
+          </div>
         </div>
 
         {matches.length > 0 && (
@@ -114,31 +139,37 @@ function Dashboard() {
           </div>
         )}
 
-        <div className="person-list">
+        <div className="persons-grid">
           {persons.map(person => (
-            <div key={person._id} className="person-card">
-              {person.photoUrl && (
-                <img 
-                  src={person.photoUrl} 
-                  alt={`${person.firstName} ${person.lastName}`}
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              )}
-              <h3>{person.firstName} {person.lastName}</h3>
-              <p><strong>Gender:</strong> {person.gender}</p>
-              {person.birthDate && (
-                <p><strong>Born:</strong> {new Date(person.birthDate).toLocaleDateString()}</p>
-              )}
-              {person.birthPlace && (
-                <p><strong>Birth Place:</strong> {person.birthPlace}</p>
-              )}
-              {person.deathDate && (
-                <p><strong>Died:</strong> {new Date(person.deathDate).toLocaleDateString()}</p>
-              )}
-              {person.notes && (
-                <p><strong>Notes:</strong> {person.notes}</p>
-              )}
-              <div className="person-card-actions">
+            <div key={person._id} className="person-card-dash">
+              <div className="person-header">
+                  <div className="person-avatar">
+                      {person.photoUrl ? (
+                         <img 
+                           src={person.photoUrl} 
+                           alt={`${person.firstName} ${person.lastName}`}
+                           onError={(e) => { e.target.style.display = 'none'; }}
+                         />
+                      ) : (
+                          <span>{person.firstName[0]}{person.lastName[0]}</span>
+                      )}
+                  </div>
+                  <div className="person-info">
+                      <h3>{person.firstName} {person.lastName}</h3>
+                      <p>{person.gender} • {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'}</p>
+                  </div>
+              </div>
+              
+              <div style={{ fontSize: '0.875rem', color: '#4b5563', marginBottom: '1rem' }}>
+                  {person.birthPlace && (
+                    <div style={{ marginBottom: '4px' }}>📍 {person.birthPlace}</div>
+                  )}
+                  {person.deathDate && (
+                    <div style={{ marginBottom: '4px' }}>✝️ {new Date(person.deathDate).toLocaleDateString()}</div>
+                  )}
+              </div>
+
+              <div className="person-actions">
                 <button 
                   className="btn-edit" 
                   onClick={() => handleEditPerson(person)}

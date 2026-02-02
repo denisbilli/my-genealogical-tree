@@ -288,6 +288,13 @@ function TreeView() {
                   <Plus size={16} /> Nuova Persona
                 </button>
              )}
+             <button 
+               onClick={() => navigate('/dashboard')}
+               className="btn btn-secondary text-xs"
+               style={{ backgroundColor: '#e5e7eb', color: '#1f2937' }}
+             >
+                Dashboard
+             </button>
              <span className="text-sm font-medium">Ciao, {user?.fullName || 'Utente'}</span>
              <button onClick={handleLogout} className="btn btn-danger p-2 rounded-full" title="Logout">
                 <LogOut size={20} />

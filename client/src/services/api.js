@@ -60,7 +60,8 @@ export const personService = {
   getTree: (id) => api.get(`/tree/${id}`),
   addRelationship: (id, relationshipData) => 
     api.post(`/persons/${id}/relationship`, relationshipData),
-  searchMatches: () => api.get('/persons/search/matches')
+  searchMatches: () => api.get('/persons/search/matches'),
+  resetParams: () => api.post('/persons/reset')
 };
 
 export default api;
