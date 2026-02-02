@@ -61,7 +61,8 @@ export const personService = {
   addRelationship: (id, relationshipData) => 
     api.post(`/persons/${id}/relationship`, relationshipData),
   searchMatches: () => api.get('/persons/search/matches'),
-  resetParams: () => api.post('/persons/reset')
+  resetParams: () => api.post('/persons/reset'),
+  repairTree: () => api.post('/tree/maintenance/repair-unions')
 };
 
 export default api;

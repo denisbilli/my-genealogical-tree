@@ -93,6 +93,15 @@ function Dashboard() {
     }
   };
 
+  const handleRepairDB = async () => {
+      try {
+          const res = await personService.repairTree();
+          alert(`Repair Complete: Merged ${res.data.fixedCouples} couples, removed ${res.data.removedUnions} duplicates.`);
+      } catch (error) {
+          alert('Repair failed.');
+      }
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
       <header className="app-header sticky top-0 z-50">
@@ -119,6 +128,13 @@ function Dashboard() {
         <div className="dashboard-header">
           <h2>Family Members</h2>
           <div style={{ display: 'flex', gap: '1rem' }}>
+            <button 
+                className="btn" 
+                style={{ backgroundColor: '#f59e0b', color: 'white' }}
+                onClick={handleRepairDB}
+            >
+                Repair Tree
+            </button>
             <button 
                 className="btn" 
                 style={{ backgroundColor: '#dc3545' }}
