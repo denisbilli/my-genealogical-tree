@@ -38,7 +38,7 @@ function App() {
             </PrivateRoute>
           } 
         />
-        <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
+        <Route path="/" element={<Navigate to={isAuthenticated ? "/tree" : "/login"} />} />
       </Routes>
     </Router>
   );
