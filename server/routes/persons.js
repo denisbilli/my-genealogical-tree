@@ -116,8 +116,36 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
       updateData.photoUrl = `/uploads/${req.file.filename}`;
     }
 
+    // Parse complex fields from FormData (strings)
+    if (updateData.parents) {
+       try {
+         updateData.parents = JSON.parse(updateData.parents);
+       } catch (e) { console.error("Error parsing parents", e); }
+    }
+    if (updateData.children) {
+       try {
+         updateData.children = JSON.parse(updateData.children);
+       } catch (e) { console.error("Error parsing children", e); }
+    }
+
     Object.assign(person, updateData);
     await person.save();
+
+    // Reciprocal relationships update (Optional for robustness)
+    // If we added parents to THIS person, we should ensure those parents have THIS person as child
+    if (updateData.parents && Array.isArray(updateData.parents)) {
+         await Person.updateMany(
+            { _id: { $in: updateData.parents }, userId: req.userId },
+            { $addToSet: { children: person._id } }
+         );
+    }
+    // If we added children to THIS person, ensure those children have THIS person as parent
+    if (updateData.children && Array.isArray(updateData.children)) {
+         await Person.updateMany(
+            { _id: { $in: updateData.children }, userId: req.userId },
+            { $addToSet: { parents: person._id } }
+         );
+    }
 
     const populatedPerson = await Person.findById(person._id)
       .populate('parents')

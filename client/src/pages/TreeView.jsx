@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Plus, Trash2, LogOut, RefreshCw, TreeDeciduous } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
 
@@ -71,13 +72,24 @@ function TreeView() {
         const payload = { ...formData, parentIds: JSON.stringify([pendingRelation.personId]) };
         await personService.create(payload);
       } else if (pendingRelation?.type === 'parent') {
+        // 1. Create the new person (the parent)
         const newParentRes = await personService.create(formData);
         const newParent = newParentRes.data;
-        const child = persons.find(p => p._id === pendingRelation.personId);
-        const currentParentIds = child.parents.map(p => typeof p === 'object' ? p._id : p);
         
+        // 2. Update the child (current node) to include this new parent
+        const child = persons.find(p => p._id === pendingRelation.personId);
+        
+        // Ensure we have an array of IDs, handling populated objects if necessary
+        const currentParentIds = (child.parents || []).map(p => 
+            (p && typeof p === 'object' && p._id) ? p._id : p
+        );
+        
+        // Add new parent ID
+        const updatedParentIds = [...currentParentIds, newParent._id];
+
+        // Send as JSON string because our partial backend fix expects that or parses it
         await personService.update(child._id, {
-            parents: JSON.stringify([...currentParentIds, newParent._id]) 
+            parents: JSON.stringify(updatedParentIds) 
         });
       } else {
         await personService.create(formData);
@@ -89,6 +101,7 @@ function TreeView() {
       alert('Errore nel salvataggio: ' + (error.response?.data?.message || error.message));
     }
   };
+
 
   const FamilyNode = ({ personId }) => {
     const person = persons.find(p => p._id === personId);
@@ -186,45 +199,66 @@ function TreeView() {
         </div>
       </header>
       
-      <main className="tree-wrapper">
+      <main className="tree-wrapper flex-1 overflow-hidden" style={{ cursor: 'grab' }}>
         {loading && persons.length === 0 ? (
-           <div className="flex items-center justify-center w-full">Caricamento...</div>
+           <div className="flex items-center justify-center w-full h-full">Caricamento...</div>
         ) : (
-           <div className="flex gap-16">
-             {rootNodes.length === 0 && persons.length > 0 ? (
-                 <div className="flex flex-col items-center mt-10">
-                     <p className="text-red-500 mb-4">Attenzione: Nessun nodo radice trovato o struttura circolare.</p>
-                     <div className="flex gap-4 flex-wrap justify-center">
-                        {persons.map(p => (
-                             <div key={p._id} className="node-card">
-                                <strong>{p.firstName} {p.lastName}</strong>
-                             </div>
-                        ))}
-                     </div>
-                 </div>
-             ) : rootNodes.length > 0 ? (
-                 rootNodes.map(root => (
-                     <FamilyNode key={root._id} personId={root._id} />
-                 ))
-             ) : (
-                <div className="text-center mt-20">
-                    <h2 className="text-2xl font-bold mb-4 text-gray-700">Il tuo albero è vuoto</h2>
-                    <p className="text-gray-500 mb-8 max-w-md mx-auto">
-                        Benvenuto! Inizia a costruire il tuo albero genealogico aggiungendo la prima persona.
-                        Potrai poi aggiungere genitori e figli cliccando sui pulsanti + nelle schede.
-                    </p>
-                    <button 
-                        className="btn btn-primary flex items-center gap-2 mx-auto text-lg px-6 py-3"
-                        onClick={() => { setPendingRelation(null); setSelectedPerson(null); setShowModal(true); }}
-                    >
-                        <Plus size={24} /> Aggiungi Capostipite
-                    </button>
-                    <div className="mt-12 opacity-50 text-sm">
-                        <p>Suggerimento: Un albero inizia dalle radici. Aggiungi il più anziano che conosci!</p>
+           <TransformWrapper
+             initialScale={1}
+             initialPositionX={0}
+             initialPositionY={0}
+             minScale={0.1}
+             maxScale={4}
+             centerOnInit={true}
+           >
+             {({ zoomIn, zoomOut, resetTransform }) => (
+               <React.Fragment>
+                  <div className="absolute top-20 right-4 z-50 flex flex-col gap-2 bg-white/50 backdrop-blur p-2 rounded-lg shadow-sm">
+                    <button onClick={() => zoomIn()} className="p-2 hover:bg-gray-200 rounded text-gray-700" title="Zoom In">+</button>
+                    <button onClick={() => zoomOut()} className="p-2 hover:bg-gray-200 rounded text-gray-700" title="Zoom Out">-</button>
+                    <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700" title="Reset">R</button>
+                  </div>
+
+                  <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full flex items-center justify-center">
+                    <div className="flex gap-16 p-20">
+                        {rootNodes.length === 0 && persons.length > 0 ? (
+                            <div className="flex flex-col items-center mt-10">
+                                <p className="text-red-500 mb-4">Attenzione: Nessun nodo radice trovato o struttura circolare.</p>
+                                <div className="flex gap-4 flex-wrap justify-center">
+                                    {persons.map(p => (
+                                        <div key={p._id} className="node-card">
+                                            <strong>{p.firstName} {p.lastName}</strong>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : rootNodes.length > 0 ? (
+                            rootNodes.map(root => (
+                                <FamilyNode key={root._id} personId={root._id} />
+                            ))
+                        ) : (
+                            <div className="text-center mt-20">
+                                <h2 className="text-2xl font-bold mb-4 text-gray-700">Il tuo albero è vuoto</h2>
+                                <p className="text-gray-500 mb-8 max-w-md mx-auto">
+                                    Benvenuto! Inizia a costruire il tuo albero genealogico aggiungendo la prima persona.
+                                    Potrai poi aggiungere genitori e figli cliccando sui pulsanti + nelle schede.
+                                </p>
+                                <button 
+                                    className="btn btn-primary flex items-center gap-2 mx-auto text-lg px-6 py-3"
+                                    onClick={() => { setPendingRelation(null); setSelectedPerson(null); setShowModal(true); }}
+                                >
+                                    <Plus size={24} /> Aggiungi Capostipite
+                                </button>
+                                <div className="mt-12 opacity-50 text-sm">
+                                    <p>Suggerimento: Un albero inizia dalle radici. Aggiungi il più anziano che conosci!</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                </div>
+                  </TransformComponent>
+               </React.Fragment>
              )}
-           </div>
+           </TransformWrapper>
         )}
       </main>
       
