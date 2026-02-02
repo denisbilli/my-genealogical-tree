@@ -322,11 +322,18 @@ function TreeView() {
 
       // Check partners
       const partners = getPartners(p._id);
+
+      // Rule: If I have ANY partner who HAS parents, they are the anchor for this couple in the tree.
+      // I should NOT be a root node, I will appear attached to them.
+      const hasPartnerWithParents = partners.some(part => part.parents && part.parents.length > 0);
+      if (hasPartnerWithParents) {
+          return false;
+      }
+
+      // If neither of us have parents (both are roots), we need a tie-breaker to avoid showing the couple twice (once for me, once for partner).
+      // Only render if my ID is smaller than all my root partners' IDs.
       const rootPartners = partners.filter(part => !part.parents || part.parents.length === 0);
-      
       if (rootPartners.length > 0) {
-          // If I have a partner who is also a root.
-          // Only render if my ID is smaller than all my root partners' IDs.
           const amILeader = rootPartners.every(rp => p._id < rp._id);
           return amILeader;
       }
