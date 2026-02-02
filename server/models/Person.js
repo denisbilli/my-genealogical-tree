@@ -69,8 +69,20 @@ const personSchema = new mongoose.Schema({
     ref: 'Union'
   }],
 
-  // Legacy/Compatibility fields (kept for easier transitions, but logic moves to parentRefs/unions)
-  // We can use getters/setters if we want to sync them
+  // Legacy/Compatibility fields (Restored to prevent crashes in legacy routes)
+  parents: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Person'
+  }],
+  children: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Person'
+  }],
+  spouse: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Person'
+  }],
+
   createdAt: {
     type: Date,
     default: Date.now
