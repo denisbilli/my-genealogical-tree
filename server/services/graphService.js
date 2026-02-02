@@ -129,16 +129,14 @@ class GraphService {
             {
                 let foundUnions = [];
                 
-                // A) Explicit Unions
-                if (person.unionIds && person.unionIds.length > 0) {
-                    const dbUnions = await Union.find({ _id: { $in: person.unionIds } });
-                    foundUnions = dbUnions.map(u => u.toObject());
-                }
+                // A) Explicit Unions (ROBUST FETCH: Search by partnerIds to find ALL unions, not just linked ones)
+                // This fixes the "Double Dot" bug where a union existed but wasn't in person.unionIds
+                const dbUnions = await Union.find({ partnerIds: id });
+                foundUnions = dbUnions.map(u => u.toObject());
 
-                // B) Legacy Fallback (if no explicit unions found, try to infer from spouse/children)
-                // Only infer if we didn't find specific unions, OR if we want to be additive. 
-                // Let's be additive but avoid duplicates.
-                if (person.spouse?.length > 0 || person.children?.length > 0) {
+                // B) Legacy Fallback (Only if absolutely no union found in DB, try to infer)
+                // Since we now search DB by partnerIds, this fallback is rarely needed unless data is very old/migrated without unions.
+                if (foundUnions.length === 0 && (person.spouse?.length > 0 || person.children?.length > 0)) {
                      // Get all children docs to check their parents
                      const childDocs = person.children && person.children.length > 0 
                         ? await Person.find({ _id: { $in: person.children } })
@@ -168,33 +166,56 @@ class GraphService {
                      for (let [partnerKey, kids] of childrenByPartner) {
                          const partnerId = partnerKey === 'unknown' ? null : partnerKey;
                          
-                         // Check if a real union already covers this pair
-                         const exists = foundUnions.some(u => 
-                            (partnerId && u.partnerIds.map(String).includes(partnerId)) ||
-                            (!partnerId && u.partnerIds.length === 1 && String(u.partnerIds[0]) === id)
-                         );
-
-                         if (!exists) {
-                             // Create virtual
-                             const vId = partnerId 
-                                ? `v-${[id, partnerId].sort().join('-')}` 
-                                : `v-${id}-unknown`;
-                             
-                             foundUnions.push({
-                                 _id: vId,
-                                 partnerIds: partnerId ? [id, partnerId] : [id],
-                                 childrenIds: kids,
-                                 kind: 'union',
-                                 generation: gen,
-                                 isVirtual: true
-                             });
-                         }
+                         // Double Check: Did we really miss a union?
+                         // (Should be covered by A, but redundant check is safe)
+                         
+                         // Create virtual
+                         const vId = partnerId 
+                            ? `v-${[id, partnerId].sort().join('-')}` 
+                            : `v-${id}-unknown`;
+                         
+                         foundUnions.push({
+                             _id: vId,
+                             partnerIds: partnerId ? [id, partnerId] : [id],
+                             childrenIds: kids,
+                             kind: 'union',
+                             generation: gen,
+                             isVirtual: true
+                         });
                      }
                 }
 
                 
+                // Track processed couples to avoid Duplicate Unions (Two dots)
+                // Map <"minId-maxId"> -> true
+                const processedCouples = new Set();
+
+                // Pre-populate with existing unions in the global map
+                for (let existingU of unions.values()) {
+                    if (existingU.partnerIds && existingU.partnerIds.length >= 1) {
+                        const pIds = existingU.partnerIds.map(String).sort();
+                        const key = pIds.length > 1 ? pIds.join('-') : `single-${pIds[0]}`;
+                        processedCouples.add(key);
+                    }
+                }
+
                 for (let u of foundUnions) {
                     if (unions.has(u._id.toString())) continue;
+
+                    // SEMANTIC DEDUPLICATION
+                    // Check if we already have a union for this couple
+                    let isDuplicate = false;
+                    if (u.partnerIds && u.partnerIds.length >= 1) {
+                         const pIds = u.partnerIds.map(String).sort();
+                         const key = pIds.length > 1 ? pIds.join('-') : `single-${pIds[0]}`;
+                         if (processedCouples.has(key)) {
+                             isDuplicate = true;
+                         } else {
+                             processedCouples.add(key);
+                         }
+                    }
+
+                    if (isDuplicate) continue;
 
                     unions.set(u._id.toString(), {
                         ...u, 
@@ -231,7 +252,7 @@ class GraphService {
 
     /**
      * Compute Layout (X, Y)
-     * Simplified approach: Groups by Generation, centers them.
+     * Smart grouping by "Family Unit" to avoid crossing lines.
      */
     static computeLayout(nodes, unions) {
         // 1. Group by Generation
@@ -245,8 +266,6 @@ class GraphService {
 
         // Add unions (Union nodes go in same layer as partners)
         unions.forEach(u => {
-             // Heuristic: Union generation is avg of partners or inherited
-             // Just stick it in the layer defined during traversal
              if (!layers[u.generation]) layers[u.generation] = [];
              layers[u.generation].push(u);
         });
@@ -258,38 +277,81 @@ class GraphService {
         Object.keys(layers).sort((a,b) => a-b).forEach(gen => {
             const items = layers[gen];
             
-            // Sort Strategy: 
-            // 1. Give priority to Unions (push to end temporarily) or shuffle?
-            // Better: Sort People by BirthDate to minimize crossing lines by keeping age-peers together.
-            items.sort((a,b) => {
-                if (a.kind === 'union' && b.kind === 'union') return 0;
-                if (a.kind === 'union') return 1; // unions last
-                if (b.kind === 'union') return -1;
-                
-                // Both are persons
+            // --- NEW SORT STRATEGY: GROUP COUPLES ---
+            // 1. Seperate Persons and Unions
+            const persons = items.filter(i => i.kind === 'person');
+            const layerUnions = items.filter(i => i.kind === 'union');
+            
+            // 2. Sort Persons by birthDate initially to have a rough order
+            persons.sort((a,b) => {
                 const dateA = a.birthDate ? new Date(a.birthDate).getTime() : 0;
                 const dateB = b.birthDate ? new Date(b.birthDate).getTime() : 0;
                 return dateA - dateB;
             });
 
+            // 3. Build Ordered List respecting Couples
+            const ordered = [];
+            const visited = new Set();
+
+            persons.forEach(p => {
+                if (visited.has(p._id.toString())) return;
+                
+                // Add Person
+                ordered.push(p);
+                visited.add(p._id.toString());
+
+                // Find Partner in THIS layer?
+                // Look for unions connecting this person to another in this layer
+                const myUnions = layerUnions.filter(u => u.partnerIds.map(String).includes(p._id.toString()));
+                
+                myUnions.forEach(u => {
+                    // Start Union immediately after person? 
+                    // No, usually P1 - Union - P2
+                    // But we push Union object later? No, we need it in the list for X calc.
+                    
+                    // Find Partner
+                    const partnerId = u.partnerIds.find(id => String(id) !== String(p._id));
+                    const partner = persons.find(px => String(px._id) === String(partnerId));
+
+                    if (partner && !visited.has(partner._id.toString())) {
+                        // Add Union
+                        ordered.push(u);
+                        // Add Partner
+                        ordered.push(partner);
+                        visited.add(partner._id.toString());
+                        visited.add(u._id.toString());
+                    } else if (!visited.has(u._id.toString())) {
+                         // Partner already visited or not in layer (shouldn't happen for couple layout)
+                         // Just add union if not visited (e.g. single parent union? or partner in other layer? unlikely)
+                         ordered.push(u);
+                         visited.add(u._id.toString());
+                    }
+                });
+            });
+
+            // Add any remaining orphans (unions or persons)
+            items.forEach(i => {
+                if (!visited.has(i._id.toString())) {
+                    ordered.push(i);
+                }
+            });
+
             // Center alignment
-            const totalWidth = items.length * this.X_SPACING;
+            const totalWidth = ordered.length * this.X_SPACING;
             let startX = -(totalWidth / 2);
 
-            items.forEach((item, index) => {
+            ordered.forEach((item, index) => {
                 // Determine Position
                 item.x = startX + (index * this.X_SPACING);
                 item.y = item.generation * this.Y_SPACING;
 
-                // Adjust for Union:
-                // If Item is Union, place it EXACTLY between its partners (if they are in this layer)
+                // Adjust for Union: STRICT CENTER
                 if (item.kind === 'union') {
-                    const p1 = items.find(x => x._id === item.partnerIds[0]?.toString());
-                    const p2 = items.find(x => x._id === item.partnerIds[1]?.toString());
+                    const p1 = ordered.find(x => x._id === item.partnerIds[0]?.toString());
+                    const p2 = ordered.find(x => x._id === item.partnerIds[1]?.toString());
+                    // Only adjust if both partners are in this layer and ordered
                     if (p1 && p2) {
                         item.x = (p1.x + p2.x) / 2;
-                        // Also push spouse p2 to be right next to p1? 
-                        // Simplified: Let's assume standard X spacing handles enough room.
                     }
                 }
 
