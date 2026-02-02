@@ -210,9 +210,13 @@ class GraphService {
                     }
 
                     // Add Children (next generation)
-                    if ((dir === 'both' || dir === 'down') && u.childrenIds) {
+                    // If dir is 'up' (we are at an ancestor), we WANT to see their children (our aunts/uncles/siblings).
+                    // So we allow adding children to the queue, switching direction to 'down'.
+                    if (u.childrenIds) {
                         for (let childId of u.childrenIds) {
-                            queue.push({ id: childId.toString(), gen: gen + 1, dir: 'down' });
+                             // Optimization: If we came from 'up', these are siblings of the previous node.
+                             // We might want to limit depth here? For now, full traversal is better for visibility.
+                             queue.push({ id: childId.toString(), gen: gen + 1, dir: 'down' });
                         }
                     }
                 }
@@ -255,11 +259,18 @@ class GraphService {
             const items = layers[gen];
             
             // Sort Strategy: 
-            // - Partners should be near each other.
-            // - Union should be between partners.
-            // - Siblings should be near each other.
-            // This is complex. For now, simple ID sort or preservation.
-            items.sort((a,b) => (a.kind === 'union' ? 1 : -1)); // push unions to end? No, mixing needed.
+            // 1. Give priority to Unions (push to end temporarily) or shuffle?
+            // Better: Sort People by BirthDate to minimize crossing lines by keeping age-peers together.
+            items.sort((a,b) => {
+                if (a.kind === 'union' && b.kind === 'union') return 0;
+                if (a.kind === 'union') return 1; // unions last
+                if (b.kind === 'union') return -1;
+                
+                // Both are persons
+                const dateA = a.birthDate ? new Date(a.birthDate).getTime() : 0;
+                const dateB = b.birthDate ? new Date(b.birthDate).getTime() : 0;
+                return dateA - dateB;
+            });
 
             // Center alignment
             const totalWidth = items.length * this.X_SPACING;

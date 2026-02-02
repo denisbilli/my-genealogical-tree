@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { TreeDeciduous, LogOut, Plus } from 'lucide-react'; 
 import { authService, personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
 
@@ -93,16 +94,26 @@ function Dashboard() {
   };
 
   return (
-    <div>
-      <nav className="navbar">
-        <h1>My Genealogical Tree</h1>
-        <div className="navbar-links">
-          <span>Welcome, {user?.fullName}</span>
-          <Link to="/tree">View Tree</Link>
-          <Link to="/dashboard">Dashboard</Link>
-          <button onClick={handleLogout}>Logout</button>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
+      <header className="app-header sticky top-0 z-50">
+        <div className="app-title">
+           <TreeDeciduous size={24} color="var(--primary)" />
+           <span>Heritg.org</span>
         </div>
-      </nav>
+        <div className="flex items-center gap-4">
+             <button 
+               onClick={() => navigate('/tree')}
+               className="btn btn-secondary text-xs"
+               style={{ backgroundColor: '#e5e7eb', color: '#1f2937' }}
+             >
+                View Tree
+             </button>
+             <span className="text-sm font-medium">Ciao, {user?.fullName || 'Utente'}</span>
+             <button onClick={handleLogout} className="btn btn-danger p-2 rounded-full" title="Logout">
+                <LogOut size={20} />
+             </button>
+        </div>
+      </header>
 
       <div className="dashboard">
         <div className="dashboard-header">
@@ -115,8 +126,8 @@ function Dashboard() {
             >
                 Reset Database
             </button>
-            <button className="btn" onClick={handleAddPerson}>
-                Add New Person
+            <button className="btn btn-primary" onClick={handleAddPerson}>
+                <Plus size={16} /> Add New Person
             </button>
           </div>
         </div>
