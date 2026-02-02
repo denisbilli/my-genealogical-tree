@@ -130,10 +130,8 @@ body {
 }
 
 /* Buttons on Card */
-.btn-add-parent, .btn-add-child {
+.btn-add-parent, .btn-add-child, .btn-add-sibling {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -149,22 +147,42 @@ body {
 }
 
 .node-card:hover .btn-add-parent,
-.node-card:hover .btn-add-child {
+.node-card:hover .btn-add-child,
+.node-card:hover .btn-add-sibling {
   opacity: 1;
 }
 
-.btn-add-parent:hover, .btn-add-child:hover {
-  transform: translateX(-50%) scale(1.1);
-}
-
 .btn-add-parent {
+  left: 50%;
+  transform: translateX(-50%);
   top: -12px;
   background-color: var(--primary);
 }
 
+.btn-add-parent:hover {
+  transform: translateX(-50%) scale(1.1);
+}
+
 .btn-add-child {
+  left: 50%;
+  transform: translateX(-50%);
   bottom: -12px;
   background-color: #22c55e;
+}
+
+.btn-add-child:hover {
+  transform: translateX(-50%) scale(1.1);
+}
+
+.btn-add-sibling {
+  top: 50%;
+  right: -12px;
+  transform: translateY(-50%);
+  background-color: #3b82f6; /* Blue-500 for sibling */
+}
+
+.btn-add-sibling:hover {
+  transform: translateY(-50%) scale(1.1);
 }
 
 /* Connectors */

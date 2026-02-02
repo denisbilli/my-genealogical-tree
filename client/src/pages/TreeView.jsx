@@ -227,6 +227,17 @@ function TreeView() {
             </button>
             )}
 
+            {/* Add Sibling Button */}
+            {!isPartner && (
+            <button 
+                className="btn-add-sibling"
+                onClick={(e) => { e.stopPropagation(); initiateAddSibling(person); }}
+                title="Aggiungi Fratello"
+            >
+                <Plus size={14} />
+            </button>
+            )}
+
             <div className="flex items-center gap-3">
                 <div className="node-image-wrapper">
                     {person.photoUrl ? (
@@ -252,12 +263,7 @@ function TreeView() {
                     </button>
                 </div>
             </div>
-{!isPartner && (
-                        <button onClick={(e) => { e.stopPropagation(); initiateAddSibling(person); }} className="text-gray-400 hover:text-amber-500" title="Aggiungi Fratello/Sorella">
-                            <Users size={14} />
-                        </button>
-                    )}
-                    
+
             {/* Add Child Button */}
             {!isPartner && (
             <button 
