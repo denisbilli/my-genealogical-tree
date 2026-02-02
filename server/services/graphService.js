@@ -125,7 +125,8 @@ class GraphService {
 
             // --- DOWN (Descendants) & PARTNERS ---
             // Look at unionIds -> Fetch Unions -> Fetch Children
-            if (dir === 'both' || dir === 'down' || dir === 'current') {
+            // Process Unions in ALL directions to ensure Partners are found (e.g. Grandmothers).
+            {
                 let foundUnions = [];
                 
                 // A) Explicit Unions
@@ -205,11 +206,11 @@ class GraphService {
                     // Add Partner to rendering (same generation)
                     const partnerId = u.partnerIds.find(pid => pid.toString() !== id);
                     if(partnerId) {
-                        queue.push({ id: partnerId.toString(), gen: gen, dir: 'current' });
+                        queue.push({ id: partnerId.toString(), gen: gen, dir: dir === 'both' ? 'both' : dir });
                     }
 
                     // Add Children (next generation)
-                    if (u.childrenIds) {
+                    if ((dir === 'both' || dir === 'down') && u.childrenIds) {
                         for (let childId of u.childrenIds) {
                             queue.push({ id: childId.toString(), gen: gen + 1, dir: 'down' });
                         }

@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const auth = require('../middleware/auth');
 const Person = require('../models/Person');
+const Union = require('../models/Union');
 const { apiLimiter, uploadLimiter } = require('../middleware/rateLimiter');
 
 // Configure multer for photo uploads
@@ -200,17 +201,39 @@ router.delete('/:id', auth, apiLimiter, async (req, res) => {
       { $pull: { children: person._id } }
     );
 
-    // Remove from children's parents
+    // Remove from children's parents (Legacy)
     await Person.updateMany(
       { parents: person._id },
       { $pull: { parents: person._id } }
     );
+    
+    // Remove from children's parentRefs (New Schema)
+    await Person.updateMany(
+        { "parentRefs.parentId": person._id },
+        { $pull: { parentRefs: { parentId: person._id } } }
+    );
 
-    // Remove from spouse
+    // Remove from spouse (Legacy)
     await Person.updateMany(
       { spouse: person._id },
       { $pull: { spouse: person._id } }
     );
+
+    // Cleanup Unions (Critical for Graph Stability)
+    // 1. Find unions where this person is a partner
+    const unions = await Union.find({ partnerIds: person._id });
+    const unionIds = unions.map(u => u._id);
+    
+    if (unionIds.length > 0) {
+        // 2. Remove these unions from the 'unionIds' of any surviving partners
+        await Person.updateMany(
+            { unionIds: { $in: unionIds } },
+            { $pull: { unionIds: { $in: unionIds } } }
+        );
+        
+        // 3. Delete the unions themselves to prevent ghost relationships
+        await Union.deleteMany({ _id: { $in: unionIds } });
+    }
 
     await person.deleteOne();
     res.json({ message: 'Person deleted successfully' });

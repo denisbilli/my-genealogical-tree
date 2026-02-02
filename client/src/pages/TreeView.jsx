@@ -36,8 +36,9 @@ function TreeView() {
       });
 
       // Add padding (node width aprox 250, height 100)
-      const paddingX = 400; 
-      const paddingY = 300;
+      // Reduced padding to keep canvas tighter to content
+      const paddingX = 150; 
+      const paddingY = 100;
 
       return {
           minX: minX - paddingX,
@@ -324,9 +325,11 @@ function TreeView() {
                             <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700">R</button>
                         </div>
                         
-                        <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
+                        <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }}>
                             {/* Render using calculated specific bounds */}
                             <div style={{ position: 'relative', width: bounds.width, height: bounds.height }}>
+                                     {/* Canvas Background to show bounds */}
+                                     {/* <div style={{ position: 'absolute', inset: 0, border: '1px dashed #e5e7eb', pointerEvents: 'none' }} /> */}
                                      
                                      <svg style={{ position: 'absolute', overflow: 'visible', top: 0, left: 0, width: '100%', height: '100%' }}>
                                         {renderEdges()}
