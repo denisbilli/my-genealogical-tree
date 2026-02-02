@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const auth = require('../middleware/auth');
 const Person = require('../models/Person');
+const { apiLimiter, uploadLimiter } = require('../middleware/rateLimiter');
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
@@ -30,7 +31,7 @@ const upload = multer({
 });
 
 // Get all persons for authenticated user
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, apiLimiter, async (req, res) => {
   try {
     const persons = await Person.find({ userId: req.userId })
       .populate('parents', 'firstName lastName')
@@ -43,7 +44,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get single person
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, apiLimiter, async (req, res) => {
   try {
     const person = await Person.findOne({ _id: req.params.id, userId: req.userId })
       .populate('parents')
@@ -61,7 +62,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create new person
-router.post('/', auth, upload.single('photo'), async (req, res) => {
+router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) => {
   try {
     const personData = {
       ...req.body,
@@ -100,7 +101,7 @@ router.post('/', auth, upload.single('photo'), async (req, res) => {
 });
 
 // Update person
-router.put('/:id', auth, upload.single('photo'), async (req, res) => {
+router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res) => {
   try {
     const person = await Person.findOne({ _id: req.params.id, userId: req.userId });
     
@@ -129,7 +130,7 @@ router.put('/:id', auth, upload.single('photo'), async (req, res) => {
 });
 
 // Delete person
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, apiLimiter, async (req, res) => {
   try {
     const person = await Person.findOne({ _id: req.params.id, userId: req.userId });
     
@@ -163,7 +164,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Add relationship (parent, child, spouse)
-router.post('/:id/relationship', auth, async (req, res) => {
+router.post('/:id/relationship', auth, apiLimiter, async (req, res) => {
   try {
     const { relatedPersonId, relationshipType } = req.body;
     
@@ -195,27 +196,33 @@ router.post('/:id/relationship', auth, async (req, res) => {
 });
 
 // Search for potential matches across all users
-router.get('/search/matches', auth, async (req, res) => {
+router.get('/search/matches', auth, apiLimiter, async (req, res) => {
   try {
     const userPersons = await Person.find({ userId: req.userId });
     const matches = [];
 
     for (const person of userPersons) {
       // Search for persons with same name and similar birth dates in other users' trees
-      const potentialMatches = await Person.find({
+      const query = {
         userId: { $ne: req.userId },
         firstName: person.firstName,
-        lastName: person.lastName,
-        $or: [
+        lastName: person.lastName
+      };
+
+      // Only add birth date comparison if the person has a birth date
+      if (person.birthDate) {
+        query.$or = [
           { birthDate: person.birthDate },
           {
             birthDate: {
-              $gte: person.birthDate ? new Date(person.birthDate.getFullYear() - 2, 0, 1) : null,
-              $lte: person.birthDate ? new Date(person.birthDate.getFullYear() + 2, 11, 31) : null
+              $gte: new Date(person.birthDate.getFullYear() - 2, 0, 1),
+              $lte: new Date(person.birthDate.getFullYear() + 2, 11, 31)
             }
           }
-        ]
-      }).populate('userId', 'username fullName');
+        ];
+      }
+
+      const potentialMatches = await Person.find(query).populate('userId', 'username fullName');
 
       if (potentialMatches.length > 0) {
         matches.push({
