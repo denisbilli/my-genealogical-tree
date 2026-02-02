@@ -96,6 +96,7 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
 
     res.status(201).json(populatedPerson);
   } catch (error) {
+    console.error('Create Person Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

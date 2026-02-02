@@ -65,9 +65,8 @@ const personSchema = new mongoose.Schema({
 });
 
 // Update the updatedAt timestamp
-personSchema.pre('save', function(next) {
+personSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Index for faster searches
