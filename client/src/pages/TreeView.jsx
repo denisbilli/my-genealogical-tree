@@ -103,10 +103,43 @@ function TreeView() {
   };
 
 
+  // Find partners: people who are co-parents of this person's children
+  const getPartners = (personId) => {
+    // 1. Find all children of personId
+    const children = persons.filter(p => 
+        p.parents && p.parents.some(parent => 
+            (typeof parent === 'object' ? parent._id : parent) === personId
+        )
+    );
+
+    // 2. For these children, find OTHER parents
+    const partnerIds = new Set();
+    children.forEach(child => {
+        if (!child.parents) return;
+        child.parents.forEach(p => {
+            const pId = typeof p === 'object' ? p._id : p;
+            if (pId !== personId) {
+                partnerIds.add(pId);
+            }
+        });
+    });
+
+    return Array.from(partnerIds).map(id => persons.find(p => p._id === id)).filter(Boolean);
+  };
+
   const FamilyNode = ({ personId }) => {
     const person = persons.find(p => p._id === personId);
     if (!person) return null;
 
+    const partners = getPartners(personId);
+
+    // Filter out partners that have a lower ID than current person to avoid cycles if both are rendered technically
+    // But since we control the entry point via rootNodes, we just render all partners found here alongside the main person.
+    
+    // Find children of this Family Unit (Children of Person OR Partners)
+    // We only want children that belong to THIS couple if we were strict, but for simplicity, we show all children of the primary person.
+    // If we want to show shared children, we check if child has parentId.
+    
     const children = persons.filter(p => 
       p.parents && p.parents.some(parent => 
         (typeof parent === 'object' ? parent._id : parent) === personId
@@ -115,9 +148,42 @@ function TreeView() {
 
     return (
       <div className="tree-node">
-        {/* Node Card */}
-        <div className="node-card">
-            {/* Add Parent Button */}
+        {/* Node or Couple Container */}
+        <div className="flex gap-4 relative">
+            {/* Primary Person */}
+            <NodeCard person={person} />
+            
+            {/* Partners */}
+            {partners.map(partner => (
+                <div key={partner._id} className="relative">
+                    {/* Visual Connector for Marriage */}
+                    <div className="absolute top-1/2 -left-3 w-2 h-1 bg-red-300"></div>
+                    <NodeCard person={partner} isPartner />
+                </div>
+            ))}
+        </div>
+
+        {/* Children */ }
+        {children.length > 0 && (
+            <div className="flex flex-col items-center">
+                <div className="connector-line-vertical"></div>
+                <div className="connector-lines-horizontal">
+                    {children.map(child => (
+                        <div key={child._id} className="child-wrapper">
+                            <FamilyNode personId={child._id} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+      </div>
+    );
+  };
+
+  const NodeCard = ({ person, isPartner }) => (
+        <div className="node-card" style={isPartner ? { borderColor: '#fca5a5' } : {}}>
+            {/* Add Parent Button - Only for Primary node to avoid confusion or allow adding parents to partner too? Let's allow only on primary for now to keep tree simple */}
+            {!isPartner && (
             <button 
                 className="btn-add-parent"
                 onClick={(e) => { e.stopPropagation(); initiateAddParent(person); }}
@@ -125,6 +191,7 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
+            )}
 
             <div className="flex items-center gap-3">
                 <div className="node-image-wrapper">
@@ -139,7 +206,7 @@ function TreeView() {
                         {person.firstName} <span style={{ textTransform: 'uppercase', fontSize: '0.8rem', opacity: 0.7 }}>{person.lastName}</span>
                     </h3>
                     <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>
-                        {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'} - {person.deathDate ? new Date(person.deathDate).getFullYear() : 'Presente'}
+                         {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'} - {person.deathDate ? new Date(person.deathDate).getFullYear() : 'Presente'}
                     </p>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -153,6 +220,7 @@ function TreeView() {
             </div>
 
             {/* Add Child Button */}
+            {!isPartner && (
             <button 
                 className="btn-add-child"
                 onClick={(e) => { e.stopPropagation(); initiateAddChild(person); }}
@@ -160,29 +228,33 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
+            )}
         </div>
+  );
 
-        {/* Children Recursion with Lines */}
-        {children.length > 0 && (
-            <div className="flex flex-col items-center">
-                {/* Vertical line from parent down to children bus */}
-                <div className="connector-line-vertical"></div>
-                
-                {/* Horizontal bus line */}
-                <div className="connector-lines-horizontal">
-                    {children.map(child => (
-                        <div key={child._id} className="child-wrapper">
-                            <FamilyNode personId={child._id} />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-      </div>
-    );
-  };
+  // Filter Root Nodes:
+  // 1. Must have NO parents.
+  // 2. If part of a couple (partner is also a root), only one should be the "primary" root.
+  // We can sort by ID and pick the smaller one to be deterministic.
+  const rootNodes = persons.filter(p => {
+      // Must be a root (no parents)
+      const isRoot = !p.parents || p.parents.length === 0;
+      if (!isRoot) return false;
 
-  const rootNodes = persons.filter(p => !p.parents || p.parents.length === 0);
+      // Check partners
+      const partners = getPartners(p._id);
+      const rootPartners = partners.filter(part => !part.parents || part.parents.length === 0);
+      
+      if (rootPartners.length > 0) {
+          // If I have a partner who is also a root.
+          // Only render if my ID is smaller than all my root partners' IDs.
+          const amILeader = rootPartners.every(rp => p._id < rp._id);
+          return amILeader;
+      }
+      
+      return true;
+  });
+
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
