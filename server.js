@@ -5,6 +5,7 @@ const path = require('path');
 const connectDB = require('./server/config/database');
 const authRoutes = require('./server/routes/auth');
 const personsRoutes = require('./server/routes/persons');
+const treeRoutes = require('./server/routes/tree');
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/persons', personsRoutes);
+app.use('/api/tree', treeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

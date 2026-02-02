@@ -42,18 +42,35 @@ const personSchema = new mongoose.Schema({
   notes: {
     type: String
   },
-  parents: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Person'
+  
+  // New Schema Structure conforming to "Pedigree Graph" requirements
+  
+  // Parents: Explicit reference + type
+  parentRefs: [{
+    _id: false,
+    parentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Person'
+    },
+    type: {
+      type: String,
+      enum: ['bio', 'adoptive', 'step', 'foster'],
+      default: 'bio'
+    },
+    certainty: {
+      type: Number,
+      default: 1
+    }
   }],
-  children: [{
+
+  // Denormalized access to Unions (where this person is a partner)
+  unionIds: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Person'
+    ref: 'Union'
   }],
-  spouse: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Person'
-  }],
+
+  // Legacy/Compatibility fields (kept for easier transitions, but logic moves to parentRefs/unions)
+  // We can use getters/setters if we want to sync them
   createdAt: {
     type: Date,
     default: Date.now

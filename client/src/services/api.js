@@ -57,6 +57,7 @@ export const personService = {
     });
   },
   delete: (id) => api.delete(`/persons/${id}`),
+  getTree: (id) => api.get(`/tree/${id}`),
   addRelationship: (id, relationshipData) => 
     api.post(`/persons/${id}/relationship`, relationshipData),
   searchMatches: () => api.get('/persons/search/matches')
