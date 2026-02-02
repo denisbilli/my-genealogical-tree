@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { User, Plus, Trash2, LogOut, TreeDeciduous, Users } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, LogOut, TreeDeciduous } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
+import NodeCard from '../components/NodeCard';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 function TreeView() {
-  const [persons, setPersons] = useState([]); // List for selection/search
+  const [persons, setPersons] = useState([]); 
   const [treeLayout, setTreeLayout] = useState({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -15,23 +17,29 @@ function TreeView() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
 
-  // On mount, load list of persons to find an entry point
+  // On mount, load list of persons
   useEffect(() => {
+    console.log("TreeView Mounted");
     loadPersons();
   }, []);
 
   const loadPersons = async () => {
     try {
+      console.log("Loading persons...");
       const response = await personService.getAll();
       const allPersons = response.data;
+      console.log("Persons loaded:", allPersons);
       setPersons(allPersons);
       
       if (allPersons.length > 0) {
           // Heuristic: Find a good root (no parents)
           const root = allPersons.find(p => !p.parents || p.parents.length === 0) || allPersons[0];
+          console.log("Selected root:", root.firstName, root._id);
           loadTree(root._id);
       } else {
+          console.log("No persons found, showing empty state.");
           setLoading(false);
+          setTreeLayout({ nodes: [], edges: [] });
       }
     } catch (error) {
       console.error('Error loading persons:', error);
@@ -42,80 +50,83 @@ function TreeView() {
   const loadTree = async (focusId) => {
       setLoading(true);
       try {
+          console.log(`Loading tree for focusId: ${focusId}`);
           const res = await personService.getTree(focusId);
-          setTreeLayout(res.data);
+          console.log("Tree data received:", res.data);
+          
+          // Safety check: ensure arrays
+          const safeData = {
+              nodes: Array.isArray(res.data.nodes) ? res.data.nodes : [],
+              edges: Array.isArray(res.data.edges) ? res.data.edges : []
+          };
+          setTreeLayout(safeData);
       } catch (error) {
           console.error("Error loading tree layout", error);
       } finally {
           setLoading(false);
       }
-  }
+  };
 
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
   };
 
-  // --- Actions ---
-  // Reuse existing logic, but refresh tree after save
-  const initiateAddParent = (person) => {
-    setPendingRelation({ type: 'parent', personId: person._id });
+  // --- Handlers (Memoization optional but good) ---
+  const initiateAddParent = useCallback((node) => {
+    setPendingRelation({ type: 'parent', personId: node._id });
     setSelectedPerson(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const initiateAddChild = (person) => {
-    setPendingRelation({ type: 'child', personId: person._id });
+  const initiateAddChild = useCallback((node) => {
+    setPendingRelation({ type: 'child', personId: node._id });
     setSelectedPerson(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const initiateAddSibling = (person) => {
-    setPendingRelation({ type: 'sibling', personId: person._id });
+  const initiateAddSibling = useCallback((node) => {
+    setPendingRelation({ type: 'sibling', personId: node._id });
     setSelectedPerson(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const initiateAddPartner = (person) => {
-    setPendingRelation({ type: 'partner', personId: person._id });
+  const initiateAddPartner = useCallback((node) => {
+    setPendingRelation({ type: 'partner', personId: node._id });
     setSelectedPerson(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const initiateEdit = (person) => {
-    setPendingRelation({ type: 'edit', personId: person._id });
-    setSelectedPerson(person);
+  const initiateEdit = useCallback((node) => {
+    setPendingRelation({ type: 'edit', personId: node._id });
+    setSelectedPerson(node);
     setShowModal(true);
-  };
+  }, []);
 
-  const deletePerson = async (id) => {
+  const deletePerson = useCallback(async (id) => {
     if (!window.confirm("Sei sicuro di voler eliminare questa persona?")) return;
     try {
         await personService.delete(id);
-        loadPersons(); // Reloads all and resets tree
+        // Reloads all and resets tree
+        await loadPersons(); 
     } catch (error) {
         alert("Errore durante l'eliminazione");
     }
-  };
+  }, []); // Recursion warning: loadPersons needs to be stable or ignored in dependency array if fine
 
   const handleSavePerson = async (formData) => {
     try {
       const currentRelation = pendingRelation?.type;
 
       if (currentRelation === 'edit') {
-        await personService.update(selectedPerson._id, formData);
+        const updatePayload = { ...formData };
+        if (selectedPerson) {
+             await personService.update(selectedPerson._id, updatePayload);
+        }
       } 
       
       else if (currentRelation === 'child') {
-        // Legacy "parentIds" array is still parsed by backend, 
-        // OR we can use the new addChildToUnion API conceptually, 
-        // but for now, sticking to compatible Person Create is safest for migration.
-        // The backend update we made didn't change the "Create Person" route to use Unions yet, 
-        // BUT the GraphService builds Virtual Unions. So if we just create a person with parents, it works.
         const parentIds = [pendingRelation.personId]; 
-        // If the current person is in a union, we probably want to include the spouse as parent?
-        // Let's keep it simple: Link to this parent. The backend GraphService will show it as "Single Parent" or merge if we add the other later.
-        
         await personService.create({ 
             ...formData, 
             parentIds: JSON.stringify(parentIds) 
@@ -123,13 +134,15 @@ function TreeView() {
       } 
       
       else if (currentRelation === 'parent') {
-        // Create Parent
         const newParentRes = await personService.create(formData);
         const newParent = newParentRes.data;
-        
-        // Link Child to Parent
         const child = persons.find(p => p._id === pendingRelation.personId);
-        const currentParentIds = (child.parents || []).map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+        
+        let currentParentIds = [];
+        if (child && child.parents) {
+             // Handle both object populate and string ID
+             currentParentIds = child.parents.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+        }
         
         await personService.update(child._id, { 
             parents: JSON.stringify([...currentParentIds, newParent._id]) 
@@ -144,7 +157,11 @@ function TreeView() {
          
          // Link Current -> Partner
          const currentPerson = persons.find(p => p._id === pendingRelation.personId);
-         const currentSpouses = (currentPerson.spouse || []).map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+         let currentSpouses = [];
+         if (currentPerson && currentPerson.spouse) {
+            currentSpouses = currentPerson.spouse.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+         }
+
          await personService.update(currentPerson._id, { 
              spouse: JSON.stringify([...currentSpouses, newPartner._id]) 
          });
@@ -152,10 +169,13 @@ function TreeView() {
       
       else if (currentRelation === 'sibling') {
         const currentPerson = persons.find(p => p._id === pendingRelation.personId);
-        let parentIds = (currentPerson.parents || []).map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+        let parentIds = [];
+        if (currentPerson && currentPerson.parents) {
+            parentIds = currentPerson.parents.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+        }
         
         if (parentIds.length === 0) {
-            // Dummy Parent Logic
+            // Create dummy parent
             const dummyParentRes = await personService.create({ 
                 firstName: '?', lastName: '?', gender: 'other', notes: 'Auto-generated' 
             });
@@ -175,116 +195,24 @@ function TreeView() {
       loadPersons(); // Reload tree
     } catch (error) {
       console.error('Save failed:', error);
-      alert('Errore nel salvataggio');
+      alert('Errore nel salvataggio: ' + error.message);
     }
-  };
-
-  // --- Render Helpers ---
-
-  const NodeCard = ({ node }) => {
-    // We map 'node' which comes from layout back to 'person' structure
-    // actually layout node contains all person fields.
-    const isUnion = node.kind === 'union';
-
-    if (isUnion) {
-        // Render a small dot or heart for union
-        return (
-            <div 
-                style={{ 
-                    position: 'absolute', 
-                    left: node.x, 
-                    top: node.y,
-                    transform: 'translate(-50%, -50%)',
-                    width: 14, height: 14, 
-                    borderRadius: '50%', 
-                    backgroundColor: '#fda4af', // pink-300
-                    border: '2px solid white',
-                    zIndex: 5,
-                    boxShadow: '0 0 0 1px #e5e7eb'
-                }}
-                title="Unione"
-            />
-        );
-    }
-
-    return (
-        <div 
-            className="node-card" 
-            style={{ 
-                position: 'absolute', 
-                left: node.x, 
-                top: node.y,
-                transform: 'translate(-50%, -50%)', // Center on coordinate
-                margin: 0, // Reset margin from CSS class
-                border: node.isPartner ? '2px solid #fca5a5' : undefined 
-            }}
-        >
-            {/* Add Parent Button */}
-            <button className="btn-add-parent" onClick={(e) => { e.stopPropagation(); initiateAddParent(node); }} title="Aggiungi Genitore">
-                <Plus size={14} />
-            </button>
-
-            {/* Add Partner Button */}
-            <button className="btn-add-partner" onClick={(e) => { e.stopPropagation(); initiateAddPartner(node); }} title="Aggiungi Partner">
-                <Plus size={14} />
-            </button>
-
-            {/* Add Sibling Button */}
-            <button className="btn-add-sibling" onClick={(e) => { e.stopPropagation(); initiateAddSibling(node); }} title="Aggiungi Fratello">
-                <Plus size={14} />
-            </button>
-
-            <div className="flex items-center gap-3">
-                <div className="node-image-wrapper">
-                    {node.photoUrl ? (
-                        <img src={node.photoUrl} alt={node.firstName} className="node-image" />
-                    ) : (
-                        <User size={24} />
-                    )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                    <h3 style={{ fontWeight: 'bold', margin: 0, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {node.firstName} <span style={{ textTransform: 'uppercase', fontSize: '0.8rem', opacity: 0.7 }}>{node.lastName}</span>
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>
-                         {node.birthDate ? new Date(node.birthDate).getFullYear() : '?'} - {node.deathDate ? new Date(node.deathDate).getFullYear() : 'Presente'}
-                    </p>
-                </div>
-                <div className="flex flex-col gap-1">
-                     <button onClick={() => initiateEdit(node)} className="text-gray-400 hover:text-blue-500" title="Modifica">
-                        <User size={14} />
-                    </button>
-                    <button onClick={() => deletePerson(node._id)} className="text-gray-400 hover:text-red-500" title="Elimina">
-                        <Trash2 size={14} />
-                    </button>
-                </div>
-            </div>
-
-            {/* Add Child Button */}
-            <button className="btn-add-child" onClick={(e) => { e.stopPropagation(); initiateAddChild(node); }} title="Aggiungi Figlio">
-                <Plus size={14} />
-            </button>
-        </div>
-    );
   };
 
   const renderEdges = () => {
-      // Edges: { from, to, type }
-      // Nodes map to find coords
-      const nodeMap = new Map(treeLayout.nodes.map(n => [n._id, n]));
+      if (!treeLayout.nodes || treeLayout.nodes.length === 0) return null;
 
-      return treeLayout.edges.map(edge => {
+      const nodeMap = new Map((treeLayout.nodes || []).map(n => [n._id, n]));
+
+      return (treeLayout.edges || []).map(edge => {
           const from = nodeMap.get(edge.from);
           const to = nodeMap.get(edge.to);
           if (!from || !to) return null;
 
           let pathD = '';
           if (edge.type === 'partner') {
-              // Usually horizontal connection
               pathD = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
           } else {
-              // Vertical (Child) connection
-              // From Union/Person down to Child
               const midY = (from.y + to.y) / 2;
               pathD = `M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`;
           }
@@ -293,13 +221,15 @@ function TreeView() {
               <path 
                 key={edge.id} 
                 d={pathD} 
-                stroke="#cbd5e1" // gray-300
+                stroke="#cbd5e1" 
                 strokeWidth="2"
                 fill="none"
               />
           );
       });
   };
+
+  console.log("Render TreeView. State:", { loading, personCount: persons.length, treeNodes: treeLayout.nodes?.length });
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
@@ -325,6 +255,7 @@ function TreeView() {
       </header>
 
       <main className="tree-wrapper flex-1 overflow-hidden" style={{ cursor: 'grab' }}>
+        <ErrorBoundary>
          {loading ? (
              <div className="flex items-center justify-center w-full h-full">Caricamento...</div>
          ) : persons.length === 0 ? (
@@ -339,11 +270,12 @@ function TreeView() {
             </div>
          ) : (
             <TransformWrapper
-                initialScale={0.8}
-                minScale={0.1}
-                maxScale={4}
-                centerOnInit={true}
+                initialScale={1}
+                minScale={0.5}
+                maxScale={2}
+                centerOnInit={false}
                 limitToBounds={false}
+                wheel={{ step: 0.1 }}
             >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                     <React.Fragment>
@@ -351,23 +283,47 @@ function TreeView() {
                             <button onClick={() => zoomIn()} className="p-2 hover:bg-gray-200 rounded text-gray-700">+</button>
                             <button onClick={() => zoomOut()} className="p-2 hover:bg-gray-200 rounded text-gray-700">-</button>
                             <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700">R</button>
+                            <div className="text-xs text-gray-500 p-2 border-t">
+                                Nodes: {treeLayout.nodes?.length || 0}<br/>
+                                Edges: {treeLayout.edges?.length || 0}
+                            </div>
                         </div>
                         
-                        <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full">
-                            {/* Auto-sizing container based on min/max coords? For now nice big area */}
-                            <div style={{ position: 'relative', width: 10000, height: 10000 }}>
-                                
-                                {/* Center the view on 5000,5000 initially via logic or just trust standard Layout */}
-                                {/* Since layout is around 0,0, we should traverse nodes? */}
-                                {/* Actually, GraphService layout produces coordinates relative to center (0,0). */}
-                                {/* To render properly inside this div, we need to offset everything by width/2, height/2 */}
-                                
-                                <div style={{ position: 'absolute', top: '50%', left: '50%' }}>
+                        <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
+                            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                {/* Center Anchor: Moves origin to center of viewport */}
+                                <div style={{ 
+                                    position: 'absolute', 
+                                    top: '50%', 
+                                    left: '50%', 
+                                    width: 0, 
+                                    height: 0, 
+                                    overflow: 'visible' 
+                                }}>
+                                     {/* Center Marker for Debug */}
+                                     <div style={{ 
+                                        position: 'absolute', 
+                                        width: 10, height: 10, 
+                                        backgroundColor: 'red', 
+                                        borderRadius: '50%', 
+                                        transform: 'translate(-50%, -50%)',
+                                        zIndex: 1000
+                                     }} />
+
                                      <svg style={{ position: 'absolute', overflow: 'visible', top: 0, left: 0 }}>
                                         {renderEdges()}
                                      </svg>
                                      {treeLayout.nodes.map(node => (
-                                        <NodeCard key={node._id} node={node} />
+                                        <NodeCard 
+                                            key={node._id} 
+                                            node={node} 
+                                            onAddParent={initiateAddParent}
+                                            onAddPartner={initiateAddPartner}
+                                            onAddSibling={initiateAddSibling}
+                                            onAddChild={initiateAddChild}
+                                            onEdit={initiateEdit}
+                                            onDelete={deletePerson}
+                                        />
                                      ))}
                                 </div>
                             </div>
@@ -376,6 +332,7 @@ function TreeView() {
                 )}
             </TransformWrapper>
          )}
+        </ErrorBoundary>
       </main>
 
       {showModal && (
