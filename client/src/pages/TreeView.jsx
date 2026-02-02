@@ -248,7 +248,6 @@ function TreeView() {
   const NodeCard = ({ person, isPartner }) => (
         <div className="node-card" style={isPartner ? { borderColor: '#fca5a5' } : {}}>
             {/* Add Parent Button */}
-            {!isPartner && (
             <button 
                 className="btn-add-parent"
                 onClick={(e) => { e.stopPropagation(); initiateAddParent(person); }}
@@ -256,10 +255,8 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
-            )}
 
             {/* Add Partner Button */}
-            {!isPartner && (
             <button 
                 className="btn-add-partner"
                 onClick={(e) => { e.stopPropagation(); initiateAddPartner(person); }}
@@ -267,10 +264,8 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
-            )}
 
             {/* Add Sibling Button */}
-            {!isPartner && (
             <button 
                 className="btn-add-sibling"
                 onClick={(e) => { e.stopPropagation(); initiateAddSibling(person); }}
@@ -278,7 +273,6 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
-            )}
 
             <div className="flex items-center gap-3">
                 <div className="node-image-wrapper">
@@ -307,7 +301,6 @@ function TreeView() {
             </div>
 
             {/* Add Child Button */}
-            {!isPartner && (
             <button 
                 className="btn-add-child"
                 onClick={(e) => { e.stopPropagation(); initiateAddChild(person); }}
@@ -315,7 +308,6 @@ function TreeView() {
             >
                 <Plus size={14} />
             </button>
-            )}
         </div>
   );
 
@@ -369,6 +361,7 @@ function TreeView() {
              minScale={0.1}
              maxScale={4}
              centerOnInit={true}
+             limitToBounds={false}
            >
              {({ zoomIn, zoomOut, resetTransform }) => (
                <React.Fragment>
