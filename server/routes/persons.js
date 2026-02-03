@@ -149,7 +149,6 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
           console.error("Auto-add child to union failed:", err);
       }
     }
-    }
 
     const populatedPerson = await Person.findById(person._id)
       .populate('parents')
