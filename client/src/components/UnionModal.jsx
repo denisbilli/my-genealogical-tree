@@ -13,6 +13,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
     const [loading, setLoading] = useState(true);
     const [selectedChild, setSelectedChild] = useState('');
     const [selectedType, setSelectedType] = useState('bio');
+    const [fullUnion, setFullUnion] = useState(null);
 
     useEffect(() => {
         loadUnionData();
@@ -22,19 +23,33 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
         try {
             setLoading(true);
             
+            // Prima carica la Union completa dal backend
+            const unionRes = await api.get(`/tree/unions/all`);
+            const fullUnionData = unionRes.data.find(u => u._id === union._id);
+            
+            if (!fullUnionData) {
+                throw new Error('Union non trovata');
+            }
+            
+            setFullUnion(fullUnionData);
+            
             // Carica i partner
-            const partnerPromises = union.partnerIds.map(id => 
+            const partnerPromises = fullUnionData.partnerIds.map(id => 
                 api.get(`/tree/person/${id}`)
             );
             const partnerResponses = await Promise.all(partnerPromises);
             setPartners(partnerResponses.map(r => r.data));
 
             // Carica i figli attuali
-            const childPromises = union.childrenIds.map(id => 
-                api.get(`/tree/person/${id}`)
-            );
-            const childResponses = await Promise.all(childPromises);
-            setChildren(childResponses.map(r => r.data));
+            if (fullUnionData.childrenIds && fullUnionData.childrenIds.length > 0) {
+                const childPromises = fullUnionData.childrenIds.map(id => 
+                    api.get(`/tree/person/${id}`)
+                );
+                const childResponses = await Promise.all(childPromises);
+                setChildren(childResponses.map(r => r.data));
+            } else {
+                setChildren([]);
+            }
 
             // Carica i potenziali figli
             const potentialRes = await api.get(`/tree/union/${union._id}/potential-children`);
@@ -42,7 +57,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
 
         } catch (error) {
             console.error('Errore nel caricamento dati union:', error);
-            alert('Errore nel caricamento: ' + error.message);
+            alert('Errore nel caricamento: ' + (error.response?.data?.error || error.message));
         } finally {
             setLoading(false);
         }
@@ -83,9 +98,11 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
     };
 
     const getParentalTypeLabel = (child) => {
-        if (!child.parentRefs) return 'Nessun tipo';
+        // Usa fullUnion se disponibile, altrimenti union (ma fullUnion è preferibile per avere i dati aggiornati)
+        const u = fullUnion || union;
+        if (!child.parentRefs || !u || !u.partnerIds) return 'Nessun tipo';
         
-        const types = union.partnerIds.map(partnerId => {
+        const types = u.partnerIds.map(partnerId => {
             const ref = child.parentRefs.find(r => 
                 r.parentId === partnerId || r.parentId.toString() === partnerId.toString()
             );
@@ -139,21 +156,25 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
                         <div>
                             <h3 className="font-semibold text-gray-700 mb-3">Partner:</h3>
                             <div className="flex gap-3">
-                                {partners.map(partner => (
-                                    <div 
-                                        key={partner._id}
-                                        className="flex items-center gap-2 bg-pink-50 px-3 py-2 rounded-lg"
-                                    >
-                                        {partner.photo && (
-                                            <img 
-                                                src={partner.photo} 
-                                                alt={partner.name}
-                                                className="w-8 h-8 rounded-full object-cover"
-                                            />
-                                        )}
-                                        <span className="font-medium">{partner.name}</span>
-                                    </div>
-                                ))}
+                                {partners.length === 0 ? (
+                                    <p className="text-gray-500 text-sm">Caricamento partner...</p>
+                                ) : (
+                                    partners.map(partner => (
+                                        <div 
+                                            key={partner._id}
+                                            className="flex items-center gap-2 bg-pink-50 px-3 py-2 rounded-lg"
+                                        >
+                                            {partner.photo && (
+                                                <img 
+                                                    src={partner.photo} 
+                                                    alt={partner.firstName}
+                                                    className="w-8 h-8 rounded-full object-cover"
+                                                />
+                                            )}
+                                            <span className="font-medium">{partner.firstName} {partner.lastName}</span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -175,12 +196,12 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
                                                 {child.photo && (
                                                     <img 
                                                         src={child.photo} 
-                                                        alt={child.name}
+                                                        alt={child.firstName}
                                                         className="w-8 h-8 rounded-full object-cover"
                                                     />
                                                 )}
                                                 <div>
-                                                    <div className="font-medium">{child.name}</div>
+                                                    <div className="font-medium">{child.firstName} {child.lastName}</div>
                                                     <div className="text-xs text-gray-600">
                                                         {getParentalTypeLabel(child)}
                                                     </div>
@@ -218,7 +239,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
                                         <option value="">-- Seleziona un figlio --</option>
                                         {potentialChildren.map(child => (
                                             <option key={child._id} value={child._id}>
-                                                {child.name}
+                                                {child.firstName} {child.lastName}
                                             </option>
                                         ))}
                                     </select>
