@@ -497,8 +497,8 @@ function TreeView() {
                                             onAddPartner={initiateAddPartner}
                                             onAddSibling={initiateAddSibling}
                                             onAddChild={initiateAddChild}
-                                            onEdit={handleEditPerson}
-                                            onDelete={handleDeletePerson}
+                                            onEdit={initiateEdit}
+                                            onDelete={deletePerson}
                                             onUnionClick={handleUnionClick}
                                         />
                                      ))}
