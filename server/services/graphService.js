@@ -152,7 +152,7 @@ class GraphService {
                 if (partnerId && !visited.has(partnerId)) {
                     queue.push({ 
                         personId: partnerId, 
-                        generation 
+                        generation: generation // Partner stays in same generation
                     });
                 }
 

@@ -127,14 +127,19 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
           const parents = await Person.find({ _id: { $in: parentIds } });
           for (const parent of parents) {
               const unions = await GraphService.findUnionsForPerson(parent._id, req.userId);
+              
+              // Se c'è una sola union, assumiamo che il figlio appartenga a quella famiglia (nucleo corrente)
+              const singleUnionCase = unions.length === 1 && parentIds.length === 1;
+
               for (const union of unions) {
                   const isOtherPartnerParent = parentIds.includes(
                       union.partnerIds.find(pid => pid.toString() !== parent._id.toString())?.toString()
                   );
                   
                   // Se entrambi i partner sono genitori -> aggiungi alla union
-                  // Oppure se è una union single-parent (non dovrebbe succedere spesso ma gestiamo)
-                  if (isOtherPartnerParent || union.partnerIds.length === 1) {
+                  // Oppure se è una union single-parent
+                  // O se stiamo aggiungendo a un genitore che ha una sola unione attiva
+                  if (isOtherPartnerParent || union.partnerIds.length === 1 || singleUnionCase) {
                       await GraphService.addChildToUnion(union._id, person._id, 'bio');
                   } else {
                       // È uno step-child per questa union?
