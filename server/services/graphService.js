@@ -263,33 +263,32 @@ class GraphService {
                     item.x = currentX;
                     currentX += this.X_SPACING;
                 } else {
-                    // Union: posizione temporanea (mezzo spazio indietro)
-                    // Sarà sovrascritta dalla logica di centratura sotto
+                    // Union: posizione temporanea
                     item.x = currentX - (this.X_SPACING / 2);
                 }
 
-                // Centra le unions tra i partner
-                if (item.kind === 'union') {
-                    // Cerca i partner prima in ordered, poi in tutti i finalNodes
-                    // FIX: Usa toString() per confronto ObjectId
-                    const partners = item.partnerIds
-                        .map(id => {
-                            const idStr = id.toString();
-                            return ordered.find(p => p._id.toString() === idStr) || 
-                                   finalNodes.find(p => p._id.toString() === idStr);
-                        })
-                        .filter(Boolean);
-
-                    if (partners.length === 2) {
-                        item.x = (partners[0].x + partners[1].x) / 2;
-                    } else if (partners.length === 1) {
-                        // Single parent: offset leggero
-                        item.x = partners[0].x + (this.X_SPACING * 0.3);
-                    }
-                    // Se non troviamo i partner, mantiene la posizione stimata
-                }
-
                 finalNodes.push(item);
+            });
+
+            // SECONDO PASSAGGIO: Centra le unions tra i partner
+            // Ora che tutti i nodi della generazione hanno X assegnato
+            ordered.filter(i => i.kind === 'union').forEach(unionNode => {
+                const partners = unionNode.partnerIds
+                    .map(id => {
+                        const idStr = id.toString();
+                        return finalNodes.find(n => n._id.toString() === idStr);
+                    })
+                    .filter(Boolean);
+
+                if (partners.length === 2) {
+                     // Ensure both partners have valid X
+                     if (typeof partners[0].x === 'number' && typeof partners[1].x === 'number') {
+                         unionNode.x = (partners[0].x + partners[1].x) / 2;
+                     }
+                } else if (partners.length === 1 && typeof partners[0].x === 'number') {
+                    // Single parent: offset leggero
+                    unionNode.x = partners[0].x + (this.X_SPACING * 0.3);
+                }
             });
         }
 
