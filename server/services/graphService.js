@@ -243,7 +243,9 @@ class GraphService {
             
             // Crea strutture di coppia per ordinamento intelligente
             const couples = this._buildCouples(persons, genUnions);
-            const ordered = this._orderItemsByCouples(couples);
+            
+            // MODIFICA: Usa ordinamento basato sulla famiglia (ancestry) invece che solo data
+            const ordered = this._orderItemsByFamily(couples, finalNodes);
 
             // MODIFICA LAYOUT: Calcolo larghezza basato solo sulle persone per avvicinarle
             // Le Union non occupano uno spazio intero "nella griglia" ma stanno tra le persone
@@ -411,7 +413,81 @@ class GraphService {
     }
 
     /**
-     * HELPER: Ordina gli elementi seguendo le coppie
+     * HELPER: Ordina gli elementi cercando di mantenere vicini i fratelli e le famiglie (Ancestry Sort)
+     */
+    static _orderItemsByFamily(couples, finalNodes) {
+        // Mappa per accesso veloce ai nodi già posizionati
+        const nodesMap = new Map(finalNodes.map(n => [n._id.toString(), n]));
+
+        // Calcola uno "score" di posizione per ogni coppia
+        const couplesWithScore = couples.map(couple => {
+            let totalParentX = 0;
+            let parentCount = 0;
+            let minBirthDate = Infinity;
+
+            const persons = couple.filter(i => i.kind === 'person');
+            
+            persons.forEach(person => {
+                // Troviamo la data di nascita per fallback
+                if (person.birthDate) {
+                    const date = new Date(person.birthDate).getTime();
+                    if (date < minBirthDate) minBirthDate = date;
+                }
+
+                // Cerchiamo i genitori nel grafo già posizionato
+                const parentIds = GraphService._getParentIds(person);
+                parentIds.forEach(pid => {
+                    const parentNode = nodesMap.get(pid.toString());
+                    if (parentNode && typeof parentNode.x === 'number') {
+                        totalParentX += parentNode.x;
+                        parentCount++;
+                    }
+                });
+            });
+
+            // Se nessun genitore trovato, ancestryX è null
+            // Se minBirthDate è ancora Infinity, mettiamo 0
+            return {
+                couple,
+                ancestryX: parentCount > 0 ? totalParentX / parentCount : null,
+                birthDate: minBirthDate === Infinity ? 0 : minBirthDate
+            };
+        });
+
+        // Ordina
+        couplesWithScore.sort((a, b) => {
+            // Caso 1: Entrambi hanno genitori posizionati (sono "figli" del grafo)
+            if (a.ancestryX !== null && b.ancestryX !== null) {
+                // Se i genitori sono molto vicini (es. fratelli), usa data di nascita
+                if (Math.abs(a.ancestryX - b.ancestryX) < 10) {
+                    return a.birthDate - b.birthDate;
+                }
+                // Altrimenti rispetta l'ordine dei genitori
+                return a.ancestryX - b.ancestryX;
+            }
+
+            // Caso 2: Uno è figlio, l'altro è un "fondatore" (senza genitori nel grafo)
+            // Mettiamo i figli a sinistra (o prima) e i fondatori nuovi a destra?
+            // Oppure cerchiamo di intercalare?
+            // Strategia semplice: I figli hanno priorità posizionale.
+            if (a.ancestryX !== null) return -1;
+            if (b.ancestryX !== null) return 1;
+            
+            // Caso 3: Entrambi sono fondatori nuove linee -> ordina per data
+            return a.birthDate - b.birthDate;
+        });
+
+        // Estrai solo le coppie appiattite
+        const ordered = [];
+        for (const item of couplesWithScore) {
+            ordered.push(...item.couple);
+        }
+
+        return ordered;
+    }
+
+    /**
+     * HELPER: Ordina gli elementi seguendo le coppie (LEGACY / FALLBACK)
      */
     static _orderItemsByCouples(couples) {
         const ordered = [];
