@@ -52,7 +52,8 @@ router.get('/union/:unionId', auth, async (req, res) => {
 // Add child to a specific union
 router.post('/union/:unionId/child', auth, async (req, res) => {
     try {
-        const { childId, parentType } = req.body; // parentType: 'bio', 'step', 'adoptive'
+        const { childId, type, parentType } = req.body; 
+        const relationType = type || parentType || 'bio';
         
         const union = await Union.findOne({ 
             _id: req.params.unionId, 
@@ -63,22 +64,26 @@ router.post('/union/:unionId/child', auth, async (req, res) => {
             return res.status(404).json({ error: 'Union non trovata' });
         }
         
-        // Usa GraphService per aggiungere il figlio
+        // Usa GraphService per aggiungere il figlio (se non c'è già)
         await GraphService.addChildToUnion(req.params.unionId, childId);
         
-        // Se è specificato un parentType diverso da 'bio', aggiorna
-        if (parentType && parentType !== 'bio') {
-            const child = await Person.findById(childId);
-            if (child) {
-                // Aggiorna il tipo di parentela per i partner della union
-                for (const partnerId of union.partnerIds) {
-                    const existingRef = child.parentRefs.find(
-                        ref => ref.parentId.toString() === partnerId.toString()
-                    );
-                    if (existingRef) {
-                        existingRef.type = parentType;
+        // Aggiorna il tipo di parentela se necessario
+        const child = await Person.findById(childId);
+        if (child) {
+            let changed = false;
+            // Aggiorna il tipo di parentela per i partner della union
+            for (const partnerId of union.partnerIds) {
+                const existingRef = child.parentRefs.find(
+                    ref => ref.parentId.toString() === partnerId.toString()
+                );
+                if (existingRef) {
+                    if (existingRef.type !== relationType) {
+                        existingRef.type = relationType;
+                        changed = true;
                     }
                 }
+            }
+            if (changed) {
                 await child.save();
             }
         }

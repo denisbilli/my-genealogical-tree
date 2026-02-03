@@ -34,16 +34,17 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
             setFullUnion(fullUnionData);
             
             // Carica i partner
-            const partnerPromises = fullUnionData.partnerIds.map(id => 
-                api.get(`/persons/${id}`)
+            // Nota: fullUnionData ha i campi populate, quindi partnerIds sono oggetti, non stringhe
+            const partnerPromises = fullUnionData.partnerIds.map(p => 
+                api.get(`/persons/${p._id || p}`)
             );
             const partnerResponses = await Promise.all(partnerPromises);
             setPartners(partnerResponses.map(r => r.data));
 
             // Carica i figli attuali
             if (fullUnionData.childrenIds && fullUnionData.childrenIds.length > 0) {
-                const childPromises = fullUnionData.childrenIds.map(id => 
-                    api.get(`/persons/${id}`)
+                const childPromises = fullUnionData.childrenIds.map(c => 
+                    api.get(`/persons/${c._id || c}`)
                 );
                 const childResponses = await Promise.all(childPromises);
                 setChildren(childResponses.map(r => r.data));
@@ -116,9 +117,12 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
         const u = fullUnion || union;
         if (!child.parentRefs || !u || !u.partnerIds) return '';
         
-        const types = u.partnerIds.map(partnerId => {
+        const types = u.partnerIds.map(partner => {
+             // Gestisci sia caso ID stringa sia caso oggetto populato
+            const partnerId = partner._id ? partner._id.toString() : partner.toString();
+            
             const ref = child.parentRefs.find(r => 
-                r.parentId === partnerId || r.parentId.toString() === partnerId.toString()
+                r.parentId === partnerId || r.parentId.toString() === partnerId
             );
             return ref ? ref.type : null;
         });
@@ -140,9 +144,12 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
         const u = fullUnion || union;
         if (!child.parentRefs || !u || !u.partnerIds) return 'Nessun tipo';
         
-        const types = u.partnerIds.map(partnerId => {
+        const types = u.partnerIds.map(partner => {
+            // Gestisci sia caso ID stringa sia caso oggetto populato
+            const partnerId = partner._id ? partner._id.toString() : partner.toString();
+            
             const ref = child.parentRefs.find(r => 
-                r.parentId === partnerId || r.parentId.toString() === partnerId.toString()
+                r.parentId === partnerId || r.parentId.toString() === partnerId
             );
             return ref ? ref.type : null;
         });
