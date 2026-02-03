@@ -35,7 +35,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
             
             // Carica i partner
             const partnerPromises = fullUnionData.partnerIds.map(id => 
-                api.get(`/tree/person/${id}`)
+                api.get(`/persons/${id}`)
             );
             const partnerResponses = await Promise.all(partnerPromises);
             setPartners(partnerResponses.map(r => r.data));
@@ -43,7 +43,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
             // Carica i figli attuali
             if (fullUnionData.childrenIds && fullUnionData.childrenIds.length > 0) {
                 const childPromises = fullUnionData.childrenIds.map(id => 
-                    api.get(`/tree/person/${id}`)
+                    api.get(`/persons/${id}`)
                 );
                 const childResponses = await Promise.all(childPromises);
                 setChildren(childResponses.map(r => r.data));
@@ -97,6 +97,44 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
         }
     };
 
+    const handleUpdateChildType = async (childId, newType) => {
+        try {
+            await api.post(`/tree/union/${union._id}/child`, {
+                childId: childId,
+                type: newType
+            });
+            await loadUnionData();
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            console.error('Errore aggiornamento tipo figlio:', error);
+            alert('Errore: ' + error.message);
+        }
+    };
+
+    const getChildTypeKey = (child) => {
+        // Usa fullUnion se disponibile, altrimenti union (ma fullUnion è preferibile per avere i dati aggiornati)
+        const u = fullUnion || union;
+        if (!child.parentRefs || !u || !u.partnerIds) return '';
+        
+        const types = u.partnerIds.map(partnerId => {
+            const ref = child.parentRefs.find(r => 
+                r.parentId === partnerId || r.parentId.toString() === partnerId.toString()
+            );
+            return ref ? ref.type : null;
+        });
+
+        const hasBothBio = types.every(t => t === 'bio');
+        const hasStep = types.some(t => t === 'step');
+        const hasAdoptive = types.some(t => t === 'adoptive');
+        const hasFoster = types.some(t => t === 'foster');
+
+        if (hasBothBio) return 'bio';
+        if (hasAdoptive) return 'adoptive';
+        if (hasFoster) return 'foster';
+        if (hasStep) return 'step';
+        return 'unknown';
+    };
+
     const getParentalTypeLabel = (child) => {
         // Usa fullUnion se disponibile, altrimenti union (ma fullUnion è preferibile per avere i dati aggiornati)
         const u = fullUnion || union;
@@ -115,9 +153,9 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
         const hasFoster = types.some(t => t === 'foster');
 
         if (hasBothBio) return '🔵 Biologico';
-        if (hasStep) return '🟠 Acquisito';
         if (hasAdoptive) return '🟢 Adottivo';
         if (hasFoster) return '🟣 Affido';
+        if (hasStep) return '🟠 Acquisito';
         return 'Misto';
     };
 
@@ -202,8 +240,20 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
                                                 )}
                                                 <div>
                                                     <div className="font-medium">{child.firstName} {child.lastName}</div>
-                                                    <div className="text-xs text-gray-600">
-                                                        {getParentalTypeLabel(child)}
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="text-xs text-gray-600 w-24">
+                                                            {getParentalTypeLabel(child)}
+                                                        </span>
+                                                        <select 
+                                                            className="text-xs border rounded p-1"
+                                                            value={getChildTypeKey(child)}
+                                                            onChange={(e) => handleUpdateChildType(child._id, e.target.value)}
+                                                        >
+                                                            <option value="bio">Biologico</option>
+                                                            <option value="step">Acquisito</option>
+                                                            <option value="adoptive">Adottivo</option>
+                                                            <option value="foster">Affido</option>
+                                                        </select>
                                                     </div>
                                                 </div>
                                             </div>
