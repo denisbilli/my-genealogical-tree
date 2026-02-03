@@ -256,6 +256,7 @@ const UnionModal = ({ union, onClose, onUpdate }) => {
                                                             value={getChildTypeKey(child)}
                                                             onChange={(e) => handleUpdateChildType(child._id, e.target.value)}
                                                         >
+                                                            <option value="unknown" disabled>-- Misto/Sconosciuto --</option>
                                                             <option value="bio">Biologico</option>
                                                             <option value="step">Acquisito</option>
                                                             <option value="adoptive">Adottivo</option>
