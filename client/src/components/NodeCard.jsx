@@ -79,19 +79,19 @@ const NodeCard = memo(({
             }}
         >
             {/* Collapse Buttons */}
-            {/* Top - Hide Ancestors */}
+            {/* Top - Hide Ancestors - Moved to Right to avoid overlap with + button */}
             <button 
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'up'); }}
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedAncestors ? 'bg-blue-100 border-blue-300' : ''}`}
+                className={`absolute -top-3 right-8 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedAncestors ? 'bg-blue-100 border-blue-300' : ''}`}
                 title={node.isCollapsedAncestors ? "Mostra antenati" : "Nascondi antenati"}
             >
                 <ChevronUp size={14} className={node.isCollapsedAncestors ? "text-blue-600 rotate-180" : "text-gray-500"} />
             </button>
 
-            {/* Bottom - Hide Descendants */}
+            {/* Bottom - Hide Descendants - Moved to Right to avoid overlap with + button */}
             <button 
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'down'); }}
-                className={`absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedDescendants ? 'bg-blue-100 border-blue-300' : ''}`}
+                className={`absolute -bottom-3 right-8 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedDescendants ? 'bg-blue-100 border-blue-300' : ''}`}
                 title={node.isCollapsedDescendants ? "Mostra discendenti" : "Nascondi discendenti"}
             >
                 <ChevronDown size={14} className={node.isCollapsedDescendants ? "text-blue-600 rotate-180" : "text-gray-500"} />
