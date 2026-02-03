@@ -17,8 +17,35 @@ function TreeView() {
   const [pendingRelation, setPendingRelation] = useState(null);
   const [showUnionModal, setShowUnionModal] = useState(false);
   const [selectedUnion, setSelectedUnion] = useState(null);
+  
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [highlightedNodeId, setHighlightedNodeId] = useState(null);
+  
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
+
+  const handleSearch = (e) => {
+      setSearchTerm(e.target.value);
+      if (e.target.value === '') {
+          setHighlightedNodeId(null);
+      }
+  };
+
+  const handleSelectSearchResult = (personId) => {
+      setHighlightedNodeId(personId);
+      setSearchTerm(''); // Clear search or keep it? Keeping it clears the dropdown
+      
+      // Funzionalità opzionale: centra la vista sul nodo
+      // Richiede accesso al ref di transformComponent -> useTransform() o ref diretto
+      // Per semplicità ora usiamo solo highlighting
+  };
+
+  const filteredPersons = searchTerm 
+      ? persons.filter(p => 
+          (p.firstName + ' ' + p.lastName).toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : [];
 
   // Helper to calculate graph bounds for centering
   const getGraphBounds = () => {
@@ -315,6 +342,52 @@ function TreeView() {
            <TreeDeciduous size={24} color="var(--primary)" />
            <span>Heritg.org</span>
         </div>
+
+        {/* Search Bar - CENTERED */}
+        <div className="flex-1 max-w-md mx-4 relative hidden md:block">
+            <div className="flex items-center border rounded-full px-4 py-1.5 bg-gray-50 focus-within:ring-2 focus-within:ring-pink-100 focus-within:border-pink-300 transition-all">
+                <input 
+                    type="text" 
+                    placeholder="Cerca in famiglia..." 
+                    className="bg-transparent border-none outline-none text-sm w-full"
+                    value={searchTerm}
+                    onChange={handleSearch}
+                />
+                {searchTerm && (
+                        <button onClick={() => { setSearchTerm(''); setHighlightedNodeId(null); }} className="text-gray-400 hover:text-gray-600 ml-2">
+                            ×
+                        </button>
+                )}
+            </div>
+            
+            {/* Search Results Dropdown */}
+            {searchTerm && filteredPersons.length > 0 && (
+                <div className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl max-h-80 overflow-y-auto z-[100]">
+                    {filteredPersons.map(p => (
+                        <div 
+                            key={p._id}
+                            className="p-3 hover:bg-pink-50 cursor-pointer text-sm flex items-center gap-3 border-b border-gray-50 last:border-b-0 transition-colors"
+                            onClick={() => handleSelectSearchResult(p._id)}
+                        >
+                            {p.photoUrl ? (
+                                <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-500 font-bold border border-pink-200">
+                                    {p.firstName[0]}
+                                </div>
+                            )}
+                            <div>
+                                <div className="font-semibold text-gray-800">{p.firstName} {p.lastName}</div>
+                                <div className="text-xs text-gray-500 flex items-center gap-1">
+                                    <span>Nascita: {p.birthDate ? new Date(p.birthDate).getFullYear() : '?'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+
         <div className="flex items-center gap-4">
              {persons.length > 0 && (
                 <button 
@@ -419,12 +492,13 @@ function TreeView() {
                                             key={node._id} 
                                             // Pass modified coordinates shifted by bounds
                                             node={{ ...node, x: node.x - bounds.minX, y: node.y - bounds.minY }}
+                                            isHighlighted={node._id === highlightedNodeId}
                                             onAddParent={initiateAddParent}
                                             onAddPartner={initiateAddPartner}
                                             onAddSibling={initiateAddSibling}
                                             onAddChild={initiateAddChild}
-                                            onEdit={initiateEdit}
-                                            onDelete={deletePerson}
+                                            onEdit={handleEditPerson}
+                                            onDelete={handleDeletePerson}
                                             onUnionClick={handleUnionClick}
                                         />
                                      ))}

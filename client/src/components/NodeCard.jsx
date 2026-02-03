@@ -10,7 +10,8 @@ const NodeCard = memo(({
     onAddChild, 
     onEdit, 
     onDelete,
-    onUnionClick
+    onUnionClick,
+    isHighlighted
 }) => {
     console.log("Rendering Node:", node._id, node.firstName, node.x, node.y);
     // We map 'node' which comes from layout back to 'person' structure
@@ -68,9 +69,12 @@ const NodeCard = memo(({
                 top: node.y,
                 transform: 'translate(-50%, -50%)', // Center on coordinate
                 margin: 0, // Reset margin from CSS class
-                border: node.isPartner ? '2px solid #fca5a5' : undefined,
+                border: isHighlighted ? '4px solid #fcd34d' : (node.isPartner ? '2px solid #fca5a5' : undefined),
+                boxShadow: isHighlighted ? '0 0 15px rgba(252, 211, 77, 0.8)' : undefined,
                 width: 250, // Fixed width
-                height: 100 // Fixed height
+                height: 100, // Fixed height
+                zIndex: isHighlighted ? 10 : 1,
+                backgroundColor: isHighlighted ? '#fffbeb' : 'white'
             }}
         >
             {/* Add Parent Button */}
