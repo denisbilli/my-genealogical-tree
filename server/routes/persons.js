@@ -5,6 +5,7 @@ const path = require('path');
 const auth = require('../middleware/auth');
 const Person = require('../models/Person');
 const Union = require('../models/Union');
+const GraphService = require('../services/graphService');
 const { apiLimiter, uploadLimiter } = require('../middleware/rateLimiter');
 
 // Configure multer for photo uploads
@@ -74,6 +75,7 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
       personData.photoUrl = `/uploads/${req.file.filename}`;
     }
 
+    // Parse spouse field
     if (req.body.spouse) {
         try {
             personData.spouse = JSON.parse(req.body.spouse);
@@ -85,20 +87,35 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
     const person = new Person(personData);
     await person.save();
 
-    // Update relationships if provided
+    // ========== GESTIONE SPOUSE: Crea Union ==========
     if (personData.spouse && Array.isArray(personData.spouse)) {
+         // Aggiorna legacy field sugli spouse
          await Person.updateMany(
             { _id: { $in: personData.spouse }, userId: req.userId },
             { $addToSet: { spouse: person._id } }
          );
+         
+         // Crea Union per ogni spouse
+         for (const spouseId of personData.spouse) {
+             await GraphService.createUnion(person._id, spouseId, req.userId);
+         }
     }
 
+    // ========== GESTIONE PARENT: Usa parentRefs ==========
     if (req.body.parentIds) {
       const parentIds = JSON.parse(req.body.parentIds);
+      
+      // Nuovo schema: parentRefs
+      person.parentRefs = parentIds.map(pid => ({
+        parentId: pid,
+        type: 'bio'
+      }));
+      
+      // Legacy: parents array
       person.parents = parentIds;
       await person.save();
       
-      // Add child to parents
+      // Add child to parents (legacy)
       await Person.updateMany(
         { _id: { $in: parentIds }, userId: req.userId },
         { $addToSet: { children: person._id } }
@@ -113,7 +130,7 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
     res.status(201).json(populatedPerson);
   } catch (error) {
     console.error('Create Person Error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Errore server', error: error.message });
   }
 });
 
@@ -123,7 +140,7 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
     const person = await Person.findOne({ _id: req.params.id, userId: req.userId });
     
     if (!person) {
-      return res.status(404).json({ message: 'Person not found' });
+      return res.status(404).json({ message: 'Persona non trovata' });
     }
 
     const updateData = { ...req.body };
@@ -152,23 +169,60 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
     Object.assign(person, updateData);
     await person.save();
 
-    // Reciprocal relationships update (Optional for robustness)
-    // If we added parents to THIS person, we should ensure those parents have THIS person as child
+    // ========== AGGIORNA PARENTREFS ==========
     if (updateData.parents && Array.isArray(updateData.parents)) {
+         // Sincronizza parentRefs con parents array
+         const existingParentIds = person.parentRefs.map(ref => ref.parentId.toString());
+         
+         for (const parentId of updateData.parents) {
+             if (!existingParentIds.includes(parentId.toString())) {
+                 person.parentRefs.push({
+                     parentId,
+                     type: 'bio'
+                 });
+             }
+         }
+         
+         await person.save();
+         
+         // Update reciprocal: add THIS person as child to parents
          await Person.updateMany(
             { _id: { $in: updateData.parents }, userId: req.userId },
             { $addToSet: { children: person._id } }
          );
     }
-    // If we added children to THIS person, ensure those children have THIS person as parent
+    
+    // ========== AGGIORNA CHILDREN ==========
     if (updateData.children && Array.isArray(updateData.children)) {
-         await Person.updateMany(
-            { _id: { $in: updateData.children }, userId: req.userId },
-            { $addToSet: { parents: person._id } }
-         );
+         // Add THIS person as parent to children
+         for (const childId of updateData.children) {
+             const child = await Person.findById(childId);
+             if (child) {
+                 const alreadyExists = child.parentRefs.some(
+                     ref => ref.parentId.toString() === person._id.toString()
+                 );
+                 if (!alreadyExists) {
+                     child.parentRefs.push({
+                         parentId: person._id,
+                         type: 'bio'
+                     });
+                     if (!child.parents.includes(person._id)) {
+                         child.parents.push(person._id);
+                     }
+                     await child.save();
+                 }
+             }
+         }
     }
-    // If we added spouse to THIS person, ensure spouse has THIS person in spouse
+    
+    // ========== AGGIORNA SPOUSE: Crea/Aggiorna Union ==========
     if (updateData.spouse && Array.isArray(updateData.spouse)) {
+         // Crea Union per ogni spouse se non esiste
+         for (const spouseId of updateData.spouse) {
+             await GraphService.createUnion(person._id, spouseId, req.userId);
+         }
+         
+         // Update reciprocal legacy field
          await Person.updateMany(
             { _id: { $in: updateData.spouse }, userId: req.userId },
             { $addToSet: { spouse: person._id } }
@@ -182,7 +236,8 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
 
     res.json(populatedPerson);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Update Person Error:', error);
+    res.status(500).json({ message: 'Errore server', error: error.message });
   }
 });
 
@@ -263,26 +318,69 @@ router.post('/:id/relationship', auth, apiLimiter, async (req, res) => {
     const relatedPerson = await Person.findOne({ _id: relatedPersonId, userId: req.userId });
     
     if (!person || !relatedPerson) {
-      return res.status(404).json({ message: 'Person not found' });
+      return res.status(404).json({ message: 'Persona non trovata' });
     }
 
     if (relationshipType === 'parent') {
-      person.parents.addToSet(relatedPersonId);
-      relatedPerson.children.addToSet(person._id);
+      // Aggiungi parent usando parentRefs (nuovo schema)
+      const alreadyExists = person.parentRefs.some(
+        ref => ref.parentId.toString() === relatedPersonId.toString()
+      );
+      if (!alreadyExists) {
+        person.parentRefs.push({
+          parentId: relatedPersonId,
+          type: 'bio'
+        });
+      }
+      
+      // Legacy fallback
+      if (!person.parents.includes(relatedPersonId)) {
+        person.parents.push(relatedPersonId);
+      }
+      if (!relatedPerson.children.includes(person._id)) {
+        relatedPerson.children.push(person._id);
+      }
+      
     } else if (relationshipType === 'child') {
-      person.children.addToSet(relatedPersonId);
-      relatedPerson.parents.addToSet(person._id);
+      // Aggiungi child usando parentRefs sul figlio
+      const alreadyExists = relatedPerson.parentRefs.some(
+        ref => ref.parentId.toString() === person._id.toString()
+      );
+      if (!alreadyExists) {
+        relatedPerson.parentRefs.push({
+          parentId: person._id,
+          type: 'bio'
+        });
+      }
+      
+      // Legacy fallback
+      if (!person.children.includes(relatedPersonId)) {
+        person.children.push(relatedPersonId);
+      }
+      if (!relatedPerson.parents.includes(person._id)) {
+        relatedPerson.parents.push(person._id);
+      }
+      
     } else if (relationshipType === 'spouse') {
-      person.spouse.addToSet(relatedPersonId);
-      relatedPerson.spouse.addToSet(person._id);
+      // Crea o ottieni Union tra i due partner
+      const union = await GraphService.createUnion(person._id, relatedPersonId, req.userId);
+      
+      // Legacy fallback
+      if (!person.spouse.includes(relatedPersonId)) {
+        person.spouse.push(relatedPersonId);
+      }
+      if (!relatedPerson.spouse.includes(person._id)) {
+        relatedPerson.spouse.push(person._id);
+      }
     }
 
     await person.save();
     await relatedPerson.save();
 
-    res.json({ message: 'Relationship added successfully' });
+    res.json({ message: 'Relazione aggiunta con successo' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Add Relationship Error:', error);
+    res.status(500).json({ message: 'Errore server', error: error.message });
   }
 });
 

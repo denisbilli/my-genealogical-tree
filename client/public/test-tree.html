@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API Tree</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #result { background: #f0f0f0; padding: 10px; margin-top: 20px; border-radius: 5px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        pre { max-height: 500px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test API Tree Endpoint</h1>
+    <p>Questo file testa se l'API /api/tree/:personId funziona correttamente</p>
+    
+    <button onclick="testAPI()">Test API</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>⏳ Caricamento...</p>';
+            
+            try {
+                // 1. Ottieni lista persone
+                const personsRes = await fetch('/api/persons', {
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    }
+                });
+                
+                if (!personsRes.ok) {
+                    throw new Error('Errore nel recupero delle persone: ' + personsRes.status);
+                }
+                
+                const persons = await personsRes.json();
+                console.log('Persone trovate:', persons.length);
+                
+                if (persons.length === 0) {
+                    resultDiv.innerHTML = '<p>⚠️ Nessuna persona nel database</p>';
+                    return;
+                }
+                
+                // 2. Prendi la prima persona
+                const firstPerson = persons[0];
+                console.log('Test con persona:', firstPerson.firstName, firstPerson._id);
+                
+                // 3. Chiama API tree
+                const treeRes = await fetch(`/api/tree/${firstPerson._id}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    }
+                });
+                
+                if (!treeRes.ok) {
+                    throw new Error('Errore API tree: ' + treeRes.status);
+                }
+                
+                const treeData = await treeRes.json();
+                console.log('Tree data:', treeData);
+                
+                // 4. Mostra risultato
+                const nodesCount = treeData.nodes ? treeData.nodes.length : 0;
+                const edgesCount = treeData.edges ? treeData.edges.length : 0;
+                
+                let html = `
+                    <h2>✅ API Funziona!</h2>
+                    <p><strong>Persona test:</strong> ${firstPerson.firstName} ${firstPerson.lastName}</p>
+                    <p><strong>Nodi trovati:</strong> ${nodesCount}</p>
+                    <p><strong>Edge trovati:</strong> ${edgesCount}</p>
+                    <h3>Primi 5 nodi:</h3>
+                    <pre>${JSON.stringify(treeData.nodes ? treeData.nodes.slice(0, 5) : [], null, 2)}</pre>
+                `;
+                
+                resultDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Errore:', error);
+                resultDiv.innerHTML = `<p>❌ Errore: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
