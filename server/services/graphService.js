@@ -276,7 +276,7 @@ class GraphService {
             });
         }
 
-        // Crea gli edge
+        // Crea gli edge con informazioni dettagliate
         unions.forEach(union => {
             // Person -> Union (linee dei partner)
             union.partnerIds.forEach(partnerId => {
@@ -284,17 +284,50 @@ class GraphService {
                     id: `partner-${partnerId}-${union._id}`,
                     from: partnerId,
                     to: union._id,
-                    type: 'partner'
+                    type: 'partner',
+                    style: 'solid' // Linea solida per partner
                 });
             });
 
             // Union -> Child (linee verso i figli)
             union.childrenIds.forEach(childId => {
+                // Trova il tipo di parentela per questo figlio
+                const childNode = finalNodes.find(n => n._id === childId);
+                let parentalType = 'bio'; // default
+                
+                if (childNode && childNode.parentRefs) {
+                    // Verifica se ENTRAMBI i partner sono genitori biologici
+                    const parentTypes = union.partnerIds.map(partnerId => {
+                        const ref = childNode.parentRefs.find(
+                            r => r.parentId.toString() === partnerId.toString()
+                        );
+                        return ref ? ref.type : null;
+                    });
+                    
+                    // Se ha entrambi i genitori biologici -> bio
+                    // Se ha un genitore bio e uno no -> mixed (step/adoptive)
+                    // Se nessuno è bio -> adoptive/foster
+                    const hasBothBio = parentTypes.every(t => t === 'bio');
+                    const hasOneBio = parentTypes.some(t => t === 'bio');
+                    const hasStep = parentTypes.some(t => t === 'step');
+                    const hasAdoptive = parentTypes.some(t => t === 'adoptive');
+                    
+                    if (hasBothBio) {
+                        parentalType = 'bio';
+                    } else if (hasStep || (hasOneBio && !hasBothBio)) {
+                        parentalType = 'step';
+                    } else if (hasAdoptive) {
+                        parentalType = 'adoptive';
+                    }
+                }
+                
                 edges.push({
                     id: `child-${union._id}-${childId}`,
                     from: union._id,
                     to: childId,
-                    type: 'child'
+                    type: 'child',
+                    parentalType, // 'bio', 'step', 'adoptive', 'foster'
+                    style: parentalType === 'bio' ? 'solid' : 'dashed'
                 });
             });
         });

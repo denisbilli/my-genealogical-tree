@@ -9,7 +9,8 @@ const NodeCard = memo(({
     onAddSibling, 
     onAddChild, 
     onEdit, 
-    onDelete 
+    onDelete,
+    onUnionClick
 }) => {
     console.log("Rendering Node:", node._id, node.firstName, node.x, node.y);
     // We map 'node' which comes from layout back to 'person' structure
@@ -17,22 +18,33 @@ const NodeCard = memo(({
     const isUnion = node.kind === 'union';
 
     if (isUnion) {
-        // Render a small dot or heart for union
+        // Render a small dot or heart for union - clickable
         return (
             <div 
+                onClick={() => onUnionClick && onUnionClick(node)}
                 style={{ 
                     position: 'absolute', 
                     left: node.x, 
                     top: node.y,
                     transform: 'translate(-50%, -50%)',
-                    width: 14, height: 14, 
+                    width: 20, height: 20, 
                     borderRadius: '50%', 
-                    backgroundColor: '#fda4af', // pink-300
-                    border: '2px solid white',
+                    backgroundColor: '#ec4899', // pink-500
+                    border: '3px solid white',
                     zIndex: 5,
-                    boxShadow: '0 0 0 1px #e5e7eb'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
                 }}
-                title="Unione"
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.2)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(236,72,153,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                }}
+                title="Clicca per gestire i figli di questa unione"
             />
         );
     }

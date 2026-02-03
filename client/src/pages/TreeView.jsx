@@ -5,6 +5,7 @@ import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
 import NodeCard from '../components/NodeCard';
+import UnionModal from '../components/UnionModal';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 function TreeView() {
@@ -13,7 +14,9 @@ function TreeView() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
-  const [pendingRelation, setPendingRelation] = useState(null); 
+  const [pendingRelation, setPendingRelation] = useState(null);
+  const [showUnionModal, setShowUnionModal] = useState(false);
+  const [selectedUnion, setSelectedUnion] = useState(null);
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
 
@@ -138,6 +141,11 @@ function TreeView() {
     setShowModal(true);
   }, []);
 
+  const handleUnionClick = useCallback((unionNode) => {
+    setSelectedUnion(unionNode);
+    setShowUnionModal(true);
+  }, []);
+
   const deletePerson = useCallback(async (id) => {
     if (!window.confirm("Sei sicuro di voler eliminare questa persona?")) return;
     try {
@@ -251,20 +259,48 @@ function TreeView() {
           const ty = to.y - bounds.minY;
 
           let pathD = '';
+          let strokeColor = '#cbd5e1'; // default gray
+          let strokeWidth = '2';
+          let strokeDasharray = '';
+
           if (edge.type === 'partner') {
+              // Linea dritta per i partner (rosa)
               pathD = `M ${fx} ${fy} L ${tx} ${ty}`;
+              strokeColor = '#ec4899'; // Rosa per partner
+              strokeWidth = '3';
           } else {
+              // Curva per i figli
               const midY = (fy + ty) / 2;
               pathD = `M ${fx} ${fy} C ${fx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`;
+              
+              // Colori e stili in base al tipo di parentela
+              if (edge.parentalType === 'bio') {
+                  strokeColor = '#3b82f6'; // Blu solido per biologico
+                  strokeWidth = '2';
+              } else if (edge.parentalType === 'step') {
+                  strokeColor = '#f59e0b'; // Arancione tratteggiato per step-parent
+                  strokeWidth = '2';
+                  strokeDasharray = '6,4';
+              } else if (edge.parentalType === 'adoptive') {
+                  strokeColor = '#10b981'; // Verde per adottivo
+                  strokeWidth = '2';
+                  strokeDasharray = '3,3';
+              } else if (edge.parentalType === 'foster') {
+                  strokeColor = '#8b5cf6'; // Viola per affido
+                  strokeWidth = '2';
+                  strokeDasharray = '8,4';
+              }
           }
 
           return (
               <path 
                 key={edge.id} 
                 d={pathD} 
-                stroke="#cbd5e1" 
-                strokeWidth="2"
+                stroke={strokeColor} 
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
                 fill="none"
+                style={{ transition: 'stroke 0.2s ease' }}
               />
           );
       });
@@ -332,6 +368,43 @@ function TreeView() {
                             <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700">R</button>
                         </div>
                         
+                        {/* Legenda tipi di relazione */}
+                        <div className="absolute top-20 left-4 z-50 bg-white rounded-lg shadow-md p-3 text-sm">
+                            <div className="font-semibold mb-2 text-gray-700">Legenda:</div>
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                    <svg width="30" height="2">
+                                        <line x1="0" y1="1" x2="30" y2="1" stroke="#ec4899" strokeWidth="3" />
+                                    </svg>
+                                    <span className="text-gray-600">Partner</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <svg width="30" height="2">
+                                        <line x1="0" y1="1" x2="30" y2="1" stroke="#3b82f6" strokeWidth="2" />
+                                    </svg>
+                                    <span className="text-gray-600">Figlio biologico</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <svg width="30" height="2">
+                                        <line x1="0" y1="1" x2="30" y2="1" stroke="#f59e0b" strokeWidth="2" strokeDasharray="6,4" />
+                                    </svg>
+                                    <span className="text-gray-600">Figlio acquisito</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <svg width="30" height="2">
+                                        <line x1="0" y1="1" x2="30" y2="1" stroke="#10b981" strokeWidth="2" strokeDasharray="3,3" />
+                                    </svg>
+                                    <span className="text-gray-600">Figlio adottivo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <svg width="30" height="2">
+                                        <line x1="0" y1="1" x2="30" y2="1" stroke="#8b5cf6" strokeWidth="2" strokeDasharray="8,4" />
+                                    </svg>
+                                    <span className="text-gray-600">Figlio in affido</span>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }}>
                             {/* Render using calculated specific bounds */}
                             <div style={{ position: 'relative', width: bounds.width, height: bounds.height }}>
@@ -352,6 +425,7 @@ function TreeView() {
                                             onAddChild={initiateAddChild}
                                             onEdit={initiateEdit}
                                             onDelete={deletePerson}
+                                            onUnionClick={handleUnionClick}
                                         />
                                      ))}
                             </div>
@@ -370,6 +444,19 @@ function TreeView() {
             onSave={handleSavePerson}
             person={selectedPerson}
             title={selectedPerson ? 'Modifica Persona' : 'Aggiungi Persona'}
+        />
+      )}
+
+      {showUnionModal && selectedUnion && (
+        <UnionModal
+            union={selectedUnion}
+            onClose={() => {
+                setShowUnionModal(false);
+                setSelectedUnion(null);
+            }}
+            onUpdate={() => {
+                loadPersons(); // Ricarica l'albero dopo modifiche
+            }}
         />
       )}
     </div>
