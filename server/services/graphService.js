@@ -245,21 +245,38 @@ class GraphService {
             const couples = this._buildCouples(persons, genUnions);
             const ordered = this._orderItemsByCouples(couples);
 
-            // Posiziona gli elementi
-            const totalWidth = ordered.length * this.X_SPACING;
-            const startX = -totalWidth / 2;
+            // MODIFICA LAYOUT: Calcolo larghezza basato solo sulle persone per avvicinarle
+            // Le Union non occupano uno spazio intero "nella griglia" ma stanno tra le persone
+            const personsInGen = ordered.filter(i => i.kind === 'person');
+            const personCount = personsInGen.length;
+            // Se ci sono persone, la larghezza è data dagli intervalli tra loro
+            const effectiveWidth = Math.max(0, personCount - 1) * this.X_SPACING;
+            
+            let currentX = -effectiveWidth / 2;
 
             ordered.forEach((item, index) => {
-                item.x = startX + (index * this.X_SPACING);
+                // Assegna Y
                 item.y = gen * this.Y_SPACING;
+
+                // Assegna X
+                if (item.kind === 'person') {
+                    item.x = currentX;
+                    currentX += this.X_SPACING;
+                } else {
+                    // Union: posizione temporanea (mezzo spazio indietro)
+                    // Sarà sovrascritta dalla logica di centratura sotto
+                    item.x = currentX - (this.X_SPACING / 2);
+                }
 
                 // Centra le unions tra i partner
                 if (item.kind === 'union') {
                     // Cerca i partner prima in ordered, poi in tutti i finalNodes
+                    // FIX: Usa toString() per confronto ObjectId
                     const partners = item.partnerIds
                         .map(id => {
-                            return ordered.find(p => p._id === id) || 
-                                   finalNodes.find(p => p._id === id);
+                            const idStr = id.toString();
+                            return ordered.find(p => p._id.toString() === idStr) || 
+                                   finalNodes.find(p => p._id.toString() === idStr);
                         })
                         .filter(Boolean);
 
@@ -269,7 +286,7 @@ class GraphService {
                         // Single parent: offset leggero
                         item.x = partners[0].x + (this.X_SPACING * 0.3);
                     }
-                    // Se non troviamo i partner, mantieni x dalla posizione sequenziale
+                    // Se non troviamo i partner, mantiene la posizione stimata
                 }
 
                 finalNodes.push(item);
@@ -365,10 +382,21 @@ class GraphService {
                 union.partnerIds.includes(p._id)
             );
             
-            if (partner) {
+            // FIX: Assicuriamoci che il partner non sia già stato incluso in un'altra coppia
+            // (es. Pompea può essere nella Union principale E in una virtual union)
+            // Se è già usato, non possiamo semplicemente ri-aggiungerlo alla lista "couples"
+            // perché creerebbe duplicati nel layout.
+            // TODO: In futuro gestire multi-partner meglio. Per ora "vince" la prima union (quella completa).
+            if (partner && !used.has(partner._id)) {
                 couples.push([partner, union]);
                 used.add(partner._id);
                 used.add(union._id);
+            } else if (partner) {
+                // Il partner è già mostrato altrove. La union rimane "orfana" nel layout?
+                // Se non la mettiamo in couples, non avrà X/Y.
+                // Proviamo a tracciare che questa union deve essere posizionata vicino al partner esistente
+                // Ma per ora lasciamo così per evitare crash/duplicati visivi. 
+                // Il vero fix è assicurarsi che i figli siano nella Union principale.
             }
         }
 

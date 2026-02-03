@@ -120,6 +120,35 @@ router.post('/', auth, uploadLimiter, upload.single('photo'), async (req, res) =
         { _id: { $in: parentIds }, userId: req.userId },
         { $addToSet: { children: person._id } }
       );
+
+      // ========== UNION SYNC: Aggiungi figlio alle Union dei genitori ==========
+      // Se i genitori fanno parte di una Union, aggiungi automaticamente il figlio
+      try {
+          const parents = await Person.find({ _id: { $in: parentIds } });
+          for (const parent of parents) {
+              const unions = await GraphService.findUnionsForPerson(parent._id, req.userId);
+              for (const union of unions) {
+                  const isOtherPartnerParent = parentIds.includes(
+                      union.partnerIds.find(pid => pid.toString() !== parent._id.toString())?.toString()
+                  );
+                  
+                  // Se entrambi i partner sono genitori -> aggiungi alla union
+                  // Oppure se è una union single-parent (non dovrebbe succedere spesso ma gestiamo)
+                  if (isOtherPartnerParent || union.partnerIds.length === 1) {
+                      await GraphService.addChildToUnion(union._id, person._id, 'bio');
+                  } else {
+                      // È uno step-child per questa union?
+                      // Se il figlio ha il genitore A, ma non B, e A e B sono in union
+                      // Allora per questa union è "step" (se vogliamo aggiungerlo auto)
+                      // Per ora aggiungiamo AUTOMATICAMENTE solo se è figlio di ENTRAMBI i partner
+                      // (comportamento "famiglia nucleare" default)
+                  }
+              }
+          }
+      } catch (err) {
+          console.error("Auto-add child to union failed:", err);
+      }
+    }
     }
 
     const populatedPerson = await Person.findById(person._id)
