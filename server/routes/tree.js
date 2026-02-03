@@ -8,7 +8,15 @@ const Union = require('../models/Union');
 // Get Tree Graph
 router.get('/:personId', auth, async (req, res) => {
     try {
-        const { nodes, unions } = await GraphService.getGraph(req.params.personId, req.userId);
+        const collapsedDescendants = req.query.collapsedDescendants ? req.query.collapsedDescendants.split(',') : [];
+        const collapsedAncestors = req.query.collapsedAncestors ? req.query.collapsedAncestors.split(',') : [];
+
+        const collapseConfig = {
+            hideDescendants: collapsedDescendants,
+            hideAncestors: collapsedAncestors
+        };
+
+        const { nodes, unions } = await GraphService.getGraph(req.params.personId, req.userId, collapseConfig);
         const layout = GraphService.computeLayout(nodes, unions);
         res.json(layout);
     } catch (e) {

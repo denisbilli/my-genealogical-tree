@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { User, Plus, Trash2 } from 'lucide-react';
+import { User, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 
 // Memoized NodeCard Component
 const NodeCard = memo(({ 
@@ -11,9 +11,10 @@ const NodeCard = memo(({
     onEdit, 
     onDelete,
     onUnionClick,
+    onToggleCollapse,
     isHighlighted
 }) => {
-    console.log("Rendering Node:", node._id, node.firstName, node.x, node.y);
+    // console.log("Rendering Node:", node._id, node.firstName, node.x, node.y);
     // We map 'node' which comes from layout back to 'person' structure
     // actually layout node contains all person fields.
     const isUnion = node.kind === 'union';
@@ -62,7 +63,7 @@ const NodeCard = memo(({
 
     return (
         <div 
-            className="node-card" 
+            className="node-card group" 
             style={{ 
                 position: 'absolute', 
                 left: node.x, 
@@ -77,6 +78,25 @@ const NodeCard = memo(({
                 backgroundColor: isHighlighted ? '#fffbeb' : 'white'
             }}
         >
+            {/* Collapse Buttons */}
+            {/* Top - Hide Ancestors */}
+            <button 
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'up'); }}
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedAncestors ? 'bg-blue-100 border-blue-300' : ''}`}
+                title={node.isCollapsedAncestors ? "Mostra antenati" : "Nascondi antenati"}
+            >
+                <ChevronUp size={14} className={node.isCollapsedAncestors ? "text-blue-600 rotate-180" : "text-gray-500"} />
+            </button>
+
+            {/* Bottom - Hide Descendants */}
+            <button 
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'down'); }}
+                className={`absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedDescendants ? 'bg-blue-100 border-blue-300' : ''}`}
+                title={node.isCollapsedDescendants ? "Mostra discendenti" : "Nascondi discendenti"}
+            >
+                <ChevronDown size={14} className={node.isCollapsedDescendants ? "text-blue-600 rotate-180" : "text-gray-500"} />
+            </button>
+
             {/* Add Parent Button */}
             <button className="btn-add-parent" onClick={(e) => { e.stopPropagation(); onAddParent(node); }} title="Aggiungi Genitore">
                 <Plus size={14} />

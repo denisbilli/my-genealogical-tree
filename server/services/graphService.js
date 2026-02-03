@@ -82,12 +82,15 @@ class GraphService {
      * Costruisce il grafo genealogico completo centrato su una persona
      * @param {string} focusId - ID della persona focus
      * @param {string} userId - ID dell'utente
+     * @param {Object} collapseConfig - Configurazione collassamento { hideDescendants: [], hideAncestors: [] }
      * @returns {Object} { nodes, unions }
      */
-    static async getGraph(focusId, userId) {
+    static async getGraph(focusId, userId, collapseConfig = { hideDescendants: [], hideAncestors: [] }) {
         const nodesMap = new Map();  // personId -> personData
         const unionsMap = new Map(); // unionId -> unionData
         const visited = new Set();   // IDs già visitati
+        const hiddenDescendantsOf = new Set(collapseConfig.hideDescendants || []);
+        const hiddenAncestorsOf = new Set(collapseConfig.hideAncestors || []);
 
         // BFS: { personId, generation }
         const queue = [{ personId: focusId.toString(), generation: 0 }];
@@ -107,17 +110,23 @@ class GraphService {
                 ...person.toObject(),
                 _id: personId,
                 generation,
-                kind: 'person'
+                kind: 'person',
+                // Flag per frontend per sapere se è collassato
+                isCollapsedDescendants: hiddenDescendantsOf.has(personId),
+                isCollapsedAncestors: hiddenAncestorsOf.has(personId)
             });
 
             // ========== ANTENATI (genitori) ==========
-            const parentIds = this._getParentIds(person);
-            for (const parentId of parentIds) {
-                if (!visited.has(parentId)) {
-                    queue.push({ 
-                        personId: parentId, 
-                        generation: generation - 1 
-                    });
+            // Se questo nodo non ha gli antenati nascosti
+            if (!hiddenAncestorsOf.has(personId)) {
+                const parentIds = this._getParentIds(person);
+                for (const parentId of parentIds) {
+                    if (!visited.has(parentId)) {
+                        queue.push({ 
+                            personId: parentId, 
+                            generation: generation - 1 
+                        });
+                    }
                 }
             }
 
@@ -131,7 +140,7 @@ class GraphService {
             for (const union of personUnions) {
                 const unionId = union._id.toString();
                 
-                // Evita duplicati
+                // Evita duplicati di Union già processate
                 if (unionsMap.has(unionId)) continue;
 
                 // Aggiungi union al grafo
@@ -157,46 +166,51 @@ class GraphService {
                 }
 
                 // Aggiungi i figli (generazione successiva)
-                for (const childId of union.childrenIds) {
-                    const childIdStr = childId.toString();
-                    if (!visited.has(childIdStr)) {
-                        queue.push({ 
-                            personId: childIdStr, 
-                            generation: generation + 1 
-                        });
+                // SOLO SE NON SONO NASCOSTI per questo nodo (personId)
+                if (!hiddenDescendantsOf.has(personId)) {
+                    for (const childId of union.childrenIds) {
+                        const childIdStr = childId.toString();
+                        if (!visited.has(childIdStr)) {
+                            queue.push({ 
+                                personId: childIdStr, 
+                                generation: generation + 1 
+                            });
+                        }
                     }
                 }
             }
 
             // ========== GESTIONE FIGLI SENZA UNION (legacy/fallback) ==========
-            // Se ci sono figli nel campo children ma non hanno union associate
-            const childrenIds = this._getChildrenIds(person);
-            const childrenInUnions = new Set(
-                Array.from(unionsMap.values())
-                    .flatMap(u => u.childrenIds)
-            );
+            // Se sono nascosti, salta anche questi
+            if (!hiddenDescendantsOf.has(personId)) {
+                const childrenIds = this._getChildrenIds(person);
+                const childrenInUnions = new Set(
+                    Array.from(unionsMap.values())
+                        .flatMap(u => u.childrenIds)
+                );
 
-            for (const childId of childrenIds) {
-                if (!childrenInUnions.has(childId) && !visited.has(childId)) {
-                    // Crea virtual union per questo figlio
-                    const virtualUnionId = `virtual-${personId}-${childId}`;
-                    
-                    if (!unionsMap.has(virtualUnionId)) {
-                        unionsMap.set(virtualUnionId, {
-                            _id: virtualUnionId,
-                            partnerIds: [personId],
-                            childrenIds: [childId],
-                            type: 'unknown',
-                            generation,
-                            kind: 'union',
-                            isVirtual: true
+                for (const childId of childrenIds) {
+                    if (!childrenInUnions.has(childId) && !visited.has(childId)) {
+                        // Crea virtual union per questo figlio
+                        const virtualUnionId = `virtual-${personId}-${childId}`;
+                        
+                        if (!unionsMap.has(virtualUnionId)) {
+                            unionsMap.set(virtualUnionId, {
+                                _id: virtualUnionId,
+                                partnerIds: [personId],
+                                childrenIds: [childId],
+                                type: 'unknown',
+                                generation,
+                                kind: 'union',
+                                isVirtual: true
+                            });
+                        }
+
+                        queue.push({ 
+                            personId: childId, 
+                            generation: generation + 1 
                         });
                     }
-
-                    queue.push({ 
-                        personId: childId, 
-                        generation: generation + 1 
-                    });
                 }
             }
         }

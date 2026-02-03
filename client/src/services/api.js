@@ -57,7 +57,17 @@ export const personService = {
     });
   },
   delete: (id) => api.delete(`/persons/${id}`),
-  getTree: (id) => api.get(`/tree/${id}`),
+  getTree: (personId, collapsedState = {}) => {
+      const params = new URLSearchParams();
+      if (collapsedState.descendants && collapsedState.descendants.size > 0) {
+          params.append('collapsedDescendants', Array.from(collapsedState.descendants).join(','));
+      }
+      if (collapsedState.ancestors && collapsedState.ancestors.size > 0) {
+          params.append('collapsedAncestors', Array.from(collapsedState.ancestors).join(','));
+      }
+      const queryString = params.toString();
+      return api.get(`/tree/${personId}${queryString ? '?' + queryString : ''}`);
+  },
   addRelationship: (id, relationshipData) => 
     api.post(`/persons/${id}/relationship`, relationshipData),
   searchMatches: () => api.get('/persons/search/matches'),

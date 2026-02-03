@@ -21,6 +21,12 @@ function TreeView() {
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedNodeId, setHighlightedNodeId] = useState(null);
+
+  // Collapse State
+  const [collapsedState, setCollapsedState] = useState({
+      descendants: new Set(),
+      ancestors: new Set()
+  });
   
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
@@ -31,6 +37,33 @@ function TreeView() {
           setHighlightedNodeId(null);
       }
   };
+
+  const handleToggleCollapse = (personId, direction) => {
+      // direction: 'up' (ancestors) or 'down' (descendants)
+      setCollapsedState(prev => {
+          const key = direction === 'up' ? 'ancestors' : 'descendants';
+          const newSet = new Set(prev[key]);
+          
+          if (newSet.has(personId)) {
+              newSet.delete(personId);
+          } else {
+              newSet.add(personId);
+          }
+          
+          return {
+              ...prev,
+              [key]: newSet
+          };
+      });
+  };
+
+  // Reload tree when collapsed state changes
+  useEffect(() => {
+      if (persons.length > 0) {
+          const root = persons.find(p => !p.parents || p.parents.length === 0) || persons[0];
+          loadTree(root._id);
+      }
+  }, [collapsedState]);
 
   const handleSelectSearchResult = (personId) => {
       setHighlightedNodeId(personId);
@@ -116,7 +149,7 @@ function TreeView() {
       setLoading(true);
       try {
           console.log(`Loading tree for focusId: ${focusId}`);
-          const res = await personService.getTree(focusId);
+          const res = await personService.getTree(focusId, collapsedState);
           console.log("Tree data received:", res.data);
           
           // Safety check: ensure arrays
@@ -499,8 +532,7 @@ function TreeView() {
                                             onAddChild={initiateAddChild}
                                             onEdit={initiateEdit}
                                             onDelete={deletePerson}
-                                            onUnionClick={handleUnionClick}
-                                        />
+                                            onUnionClick={handleUnionClick}                                            onToggleCollapse={handleToggleCollapse}                                        />
                                      ))}
                             </div>
                         </TransformComponent>
