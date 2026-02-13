@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { TreeDeciduous, LogOut, Plus } from 'lucide-react'; 
-import { authService, personService } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
+import Layout from '../components/Layout';
 
 function Dashboard() {
   const [persons, setPersons] = useState([]);
@@ -10,7 +11,6 @@ function Dashboard() {
   const [editingPerson, setEditingPerson] = useState(null);
   const [matches, setMatches] = useState([]);
   const navigate = useNavigate();
-  const user = authService.getCurrentUser();
 
   useEffect(() => {
     loadPersons();
@@ -33,11 +33,6 @@ function Dashboard() {
     } catch (error) {
       console.error('Error loading matches:', error);
     }
-  };
-
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
   };
 
   const handleAddPerson = () => {
@@ -100,44 +95,24 @@ function Dashboard() {
       } catch (error) {
           alert('Repair failed.');
       }
-  }
+  };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
-      <header className="app-header sticky top-0 z-50">
-        <div className="app-title">
-           <TreeDeciduous size={24} color="var(--primary)" />
-           <span>Heritg.org</span>
-        </div>
-        <div className="flex items-center gap-4">
-             <button 
-               onClick={() => navigate('/tree')}
-               className="btn btn-secondary text-xs"
-               style={{ backgroundColor: '#e5e7eb', color: '#1f2937' }}
-             >
-                View Tree
-             </button>
-             <span className="text-sm font-medium">Ciao, {user?.fullName || 'Utente'}</span>
-             <button onClick={handleLogout} className="btn btn-danger p-2 rounded-full" title="Logout">
-                <LogOut size={20} />
-             </button>
-        </div>
-      </header>
-
+    <Layout title="Heritg.org" showBackButton={true} backButtonText="View Tree" backButtonPath="/tree">
       <div className="dashboard">
         <div className="dashboard-header">
-          <h2>Family Members</h2>
+          <h2 style={{ color: 'var(--text-main)' }}>Family Members</h2>
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button 
                 className="btn" 
-                style={{ backgroundColor: '#f59e0b', color: 'white' }}
+                style={{ backgroundColor: 'var(--primary)', color: 'white' }}
                 onClick={handleRepairDB}
             >
                 Repair Tree
             </button>
             <button 
                 className="btn" 
-                style={{ backgroundColor: '#dc3545' }}
+                style={{ backgroundColor: '#dc3545', color: 'white' }}
                 onClick={handleResetDB}
             >
                 Reset Database
@@ -150,16 +125,16 @@ function Dashboard() {
 
         {matches.length > 0 && (
           <div style={{ 
-            background: '#fff3cd', 
+            background: 'var(--bg-secondary)', 
             padding: '15px', 
             borderRadius: '8px', 
             marginBottom: '20px',
-            border: '1px solid #ffc107'
+            border: '1px solid var(--border-color)'
           }}>
-            <h3 style={{ color: '#856404', marginBottom: '10px' }}>
+            <h3 style={{ color: 'var(--primary)', marginBottom: '10px' }}>
               🎯 Potential Matches Found!
             </h3>
-            <p style={{ color: '#856404' }}>
+            <p style={{ color: 'var(--text-secondary)' }}>
               We found {matches.length} potential match(es) between your tree and other users. 
               These connections could help expand your family tree!
             </p>
@@ -182,12 +157,12 @@ function Dashboard() {
                       )}
                   </div>
                   <div className="person-info">
-                      <h3>{person.firstName} {person.lastName}</h3>
-                      <p>{person.gender} • {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'}</p>
+                      <h3 style={{ color: 'var(--text-main)' }}>{person.firstName} {person.lastName}</h3>
+                      <p style={{ color: 'var(--text-secondary)' }}>{person.gender} • {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'}</p>
                   </div>
               </div>
               
-              <div style={{ fontSize: '0.875rem', color: '#4b5563', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
                   {person.birthPlace && (
                     <div style={{ marginBottom: '4px' }}>📍 {person.birthPlace}</div>
                   )}
@@ -218,11 +193,12 @@ function Dashboard() {
           <div style={{ 
             textAlign: 'center', 
             padding: '40px', 
-            background: 'white', 
-            borderRadius: '10px' 
+            background: 'var(--card-bg)', 
+            borderRadius: '10px',
+            color: 'var(--text-main)'
           }}>
             <h3>No family members yet</h3>
-            <p>Start building your family tree by adding your first person!</p>
+            <p style={{ color: 'var(--text-secondary)' }}>Start building your family tree by adding your first person!</p>
           </div>
         )}
       </div>
@@ -235,7 +211,7 @@ function Dashboard() {
           onClose={() => setShowModal(false)}
         />
       )}
-    </div>
+    </Layout>
   );
 }
 

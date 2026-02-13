@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, LogOut, TreeDeciduous } from 'lucide-react';
+import { Plus, LogOut, TreeDeciduous, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
@@ -17,6 +17,7 @@ function TreeView() {
   const [pendingRelation, setPendingRelation] = useState(null);
   const [showUnionModal, setShowUnionModal] = useState(false);
   const [selectedUnion, setSelectedUnion] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +31,29 @@ function TreeView() {
   
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
+
+  // Load dark mode preference
+  useEffect(() => {
+    const darkModePreference = localStorage.getItem('darkMode') === 'true';
+    setIsDarkMode(darkModePreference);
+    if (darkModePreference) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    localStorage.setItem('darkMode', newDarkMode.toString());
+    
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   const handleSearch = (e) => {
       setSearchTerm(e.target.value);
@@ -369,7 +393,7 @@ function TreeView() {
   console.log("Render TreeView. State:", { loading, personCount: persons.length, treeNodes: treeLayout.nodes?.length });
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-light)', display: 'flex', flexDirection: 'column' }}>
       <header className="app-header sticky top-0 z-50">
         <div className="app-title">
            <TreeDeciduous size={24} color="var(--primary)" />
@@ -378,16 +402,41 @@ function TreeView() {
 
         {/* Search Bar - CENTERED */}
         <div className="flex-1 max-w-md mx-4 relative hidden md:block">
-            <div className="flex items-center border rounded-full px-4 py-1.5 bg-gray-50 focus-within:ring-2 focus-within:ring-pink-100 focus-within:border-pink-300 transition-all">
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              border: '1px solid var(--border-color)',
+              borderRadius: '9999px',
+              padding: '0.375rem 1rem',
+              backgroundColor: 'var(--bg-secondary)',
+              transition: 'all 0.2s'
+            }}>
                 <input 
                     type="text" 
                     placeholder="Cerca in famiglia..." 
-                    className="bg-transparent border-none outline-none text-sm w-full"
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: '0.875rem',
+                      width: '100%',
+                      color: 'var(--text-main)'
+                    }}
                     value={searchTerm}
                     onChange={handleSearch}
                 />
                 {searchTerm && (
-                        <button onClick={() => { setSearchTerm(''); setHighlightedNodeId(null); }} className="text-gray-400 hover:text-gray-600 ml-2">
+                        <button 
+                          onClick={() => { setSearchTerm(''); setHighlightedNodeId(null); }} 
+                          style={{
+                            color: 'var(--text-secondary)',
+                            marginLeft: '0.5rem',
+                            cursor: 'pointer',
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.25rem'
+                          }}
+                        >
                             ×
                         </button>
                 )}
@@ -395,23 +444,58 @@ function TreeView() {
             
             {/* Search Results Dropdown */}
             {searchTerm && filteredPersons.length > 0 && (
-                <div className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl max-h-80 overflow-y-auto z-[100]">
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  backgroundColor: 'var(--card-bg)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '0.75rem',
+                  boxShadow: '0 20px 25px -5px var(--shadow-color)',
+                  maxHeight: '20rem',
+                  overflowY: 'auto',
+                  zIndex: 100
+                }}>
                     {filteredPersons.map(p => (
                         <div 
                             key={p._id}
-                            className="p-3 hover:bg-pink-50 cursor-pointer text-sm flex items-center gap-3 border-b border-gray-50 last:border-b-0 transition-colors"
+                            style={{
+                              padding: '0.75rem',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              borderBottom: '1px solid var(--border-color)',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             onClick={() => handleSelectSearchResult(p._id)}
                         >
                             {p.photoUrl ? (
-                                <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                <img src={p.photoUrl} alt="" style={{ width: '2rem', height: '2rem', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' }} />
                             ) : (
-                                <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-500 font-bold border border-pink-200">
+                                <div style={{ 
+                                  width: '2rem', 
+                                  height: '2rem', 
+                                  borderRadius: '50%', 
+                                  backgroundColor: 'var(--bg-secondary)', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  color: 'var(--primary)', 
+                                  fontWeight: 'bold', 
+                                  border: '1px solid var(--border-color)' 
+                                }}>
                                     {p.firstName[0]}
                                 </div>
                             )}
                             <div>
-                                <div className="font-semibold text-gray-800">{p.firstName} {p.lastName}</div>
-                                <div className="text-xs text-gray-500 flex items-center gap-1">
+                                <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{p.firstName} {p.lastName}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                     <span>Nascita: {p.birthDate ? new Date(p.birthDate).getFullYear() : '?'}</span>
                                 </div>
                             </div>
@@ -430,15 +514,30 @@ function TreeView() {
                   <Plus size={16} /> Nuova Persona
                 </button>
              )}
+             
+             {/* Dark Mode Toggle */}
+             <button
+               onClick={toggleDarkMode}
+               className="p-2 rounded-full transition-colors"
+               title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+               style={{ backgroundColor: 'var(--bg-secondary)' }}
+             >
+               {isDarkMode ? <Sun size={20} color="var(--primary)" /> : <Moon size={20} color="var(--primary)" />}
+             </button>
+             
              <button 
                onClick={() => navigate('/dashboard')}
                className="btn btn-secondary text-xs"
-               style={{ backgroundColor: '#e5e7eb', color: '#1f2937' }}
+               style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)' }}
              >
                 Dashboard
              </button>
-             <span className="text-sm font-medium">Ciao, {user?.fullName || 'Utente'}</span>
-             <button onClick={handleLogout} className="btn btn-danger p-2 rounded-full" title="Logout">
+             <span className="text-sm font-medium" style={{ color: 'var(--text-main)' }}>Ciao, {user?.fullName || 'Utente'}</span>
+             <button 
+               onClick={() => { authService.logout(); navigate('/login'); }} 
+               className="btn btn-danger p-2 rounded-full" 
+               title="Logout"
+             >
                 <LogOut size={20} />
              </button>
         </div>
@@ -447,10 +546,10 @@ function TreeView() {
       <main className="tree-wrapper flex-1 overflow-hidden" style={{ cursor: 'grab' }}>
         <ErrorBoundary>
          {loading ? (
-             <div className="flex items-center justify-center w-full h-full">Caricamento...</div>
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--text-main)' }}>Caricamento...</div>
          ) : persons.length === 0 ? (
-            <div className="flex flex-col items-center justify-center w-full h-full gap-4">
-                <p className="text-gray-500 mb-2">Non ci sono ancora persone nel tuo albero.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', gap: '1rem' }}>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Non ci sono ancora persone nel tuo albero.</p>
                 <button 
                   onClick={() => { setSelectedPerson(null); setPendingRelation(null); setShowModal(true); }}
                   className="btn btn-primary"
@@ -468,45 +567,45 @@ function TreeView() {
             >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                     <React.Fragment>
-                        <div className="absolute top-20 right-4 z-50 flex flex-col gap-2 bg-white/50 backdrop-blur p-2 rounded-lg shadow-sm">
-                            <button onClick={() => zoomIn()} className="p-2 hover:bg-gray-200 rounded text-gray-700">+</button>
-                            <button onClick={() => zoomOut()} className="p-2 hover:bg-gray-200 rounded text-gray-700">-</button>
-                            <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-200 rounded text-gray-700">R</button>
+                        <div className="absolute top-20 right-4 z-50 flex flex-col gap-2 p-2 rounded-lg shadow-sm" style={{ backgroundColor: 'var(--card-bg)', backdropFilter: 'blur(8px)' }}>
+                            <button onClick={() => zoomIn()} className="p-2 rounded" style={{ color: 'var(--text-main)', backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>+</button>
+                            <button onClick={() => zoomOut()} className="p-2 rounded" style={{ color: 'var(--text-main)', backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>-</button>
+                            <button onClick={() => resetTransform()} className="p-2 rounded" style={{ color: 'var(--text-main)', backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>R</button>
                         </div>
                         
                         {/* Legenda tipi di relazione */}
-                        <div className="absolute top-20 left-4 z-50 bg-white rounded-lg shadow-md p-3 text-sm">
-                            <div className="font-semibold mb-2 text-gray-700">Legenda:</div>
+                        <div className="absolute top-20 left-4 z-50 rounded-lg shadow-md p-3 text-sm" style={{ backgroundColor: 'var(--card-bg)' }}>
+                            <div className="font-semibold mb-2" style={{ color: 'var(--text-main)' }}>Legenda:</div>
                             <div className="flex flex-col gap-1.5">
                                 <div className="flex items-center gap-2">
                                     <svg width="30" height="2">
                                         <line x1="0" y1="1" x2="30" y2="1" stroke="#ec4899" strokeWidth="3" />
                                     </svg>
-                                    <span className="text-gray-600">Partner</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Partner</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <svg width="30" height="2">
                                         <line x1="0" y1="1" x2="30" y2="1" stroke="#3b82f6" strokeWidth="2" />
                                     </svg>
-                                    <span className="text-gray-600">Figlio biologico</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Figlio biologico</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <svg width="30" height="2">
                                         <line x1="0" y1="1" x2="30" y2="1" stroke="#f59e0b" strokeWidth="2" strokeDasharray="6,4" />
                                     </svg>
-                                    <span className="text-gray-600">Figlio acquisito</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Figlio acquisito</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <svg width="30" height="2">
                                         <line x1="0" y1="1" x2="30" y2="1" stroke="#10b981" strokeWidth="2" strokeDasharray="3,3" />
                                     </svg>
-                                    <span className="text-gray-600">Figlio adottivo</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Figlio adottivo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <svg width="30" height="2">
                                         <line x1="0" y1="1" x2="30" y2="1" stroke="#8b5cf6" strokeWidth="2" strokeDasharray="8,4" />
                                     </svg>
-                                    <span className="text-gray-600">Figlio in affido</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Figlio in affido</span>
                                 </div>
                             </div>
                         </div>

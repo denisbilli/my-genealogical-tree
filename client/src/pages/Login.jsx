@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/api';
+import AuthLayout from '../components/AuthLayout';
 
 function Login({ setIsAuthenticated }) {
   const [formData, setFormData] = useState({
@@ -33,7 +34,7 @@ function Login({ setIsAuthenticated }) {
   };
 
   return (
-    <div className="auth-container">
+    <AuthLayout>
       <div className="auth-card">
         <h2>Login to Genealogical Tree</h2>
         {error && <div className="error">{error}</div>}
@@ -58,13 +59,13 @@ function Login({ setIsAuthenticated }) {
               required
             />
           </div>
-          <button type="submit" className="btn">Login</button>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Login</button>
         </form>
-        <div className="auth-link">
+        <div className="auth-redirect">
           Don't have an account? <Link to="/register">Register here</Link>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 }
 
