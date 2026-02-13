@@ -32,9 +32,9 @@ const NodeCard = memo(({
                     width: 20, height: 20, 
                     borderRadius: '50%', 
                     backgroundColor: '#ec4899', // pink-500
-                    border: '3px solid white',
+                    border: '3px solid var(--card-bg)',
                     zIndex: 5,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    boxShadow: '0 2px 8px var(--shadow-color)',
                     cursor: 'pointer',
                     transition: 'transform 0.2s ease, box-shadow 0.2s ease'
                 }}
@@ -74,27 +74,58 @@ const NodeCard = memo(({
                 boxShadow: isHighlighted ? '0 0 15px rgba(252, 211, 77, 0.8)' : undefined,
                 width: 250, // Fixed width
                 height: 100, // Fixed height
-                zIndex: isHighlighted ? 10 : 1,
-                backgroundColor: isHighlighted ? '#fffbeb' : 'white'
+                zIndex: isHighlighted ? 10 : 1
             }}
         >
             {/* Collapse Buttons */}
             {/* Top - Hide Ancestors - Moved to Right to avoid overlap with + button */}
             <button 
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'up'); }}
-                className={`absolute -top-3 right-8 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedAncestors ? 'bg-blue-100 border-blue-300' : ''}`}
+                style={{
+                  position: 'absolute',
+                  top: '-0.75rem',
+                  right: '2rem',
+                  width: '1.5rem',
+                  height: '1.5rem',
+                  borderRadius: '50%',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: node.isCollapsedAncestors ? 'var(--bg-secondary)' : 'var(--card-bg)',
+                  boxShadow: '0 1px 3px 0 var(--shadow-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  zIndex: 20
+                }}
                 title={node.isCollapsedAncestors ? "Mostra antenati" : "Nascondi antenati"}
             >
-                <ChevronUp size={14} className={node.isCollapsedAncestors ? "text-blue-600 rotate-180" : "text-gray-500"} />
+                <ChevronUp size={14} color={node.isCollapsedAncestors ? "var(--primary)" : "var(--text-secondary)"} style={{ transform: node.isCollapsedAncestors ? 'rotate(180deg)' : 'none' }} />
             </button>
 
             {/* Bottom - Hide Descendants - Moved to Right to avoid overlap with + button */}
             <button 
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'down'); }}
-                className={`absolute -bottom-3 right-8 w-6 h-6 rounded-full border border-gray-200 bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors z-20 ${node.isCollapsedDescendants ? 'bg-blue-100 border-blue-300' : ''}`}
+                style={{
+                  position: 'absolute',
+                  bottom: '-0.75rem',
+                  right: '2rem',
+                  width: '1.5rem',
+                  height: '1.5rem',
+                  borderRadius: '50%',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: node.isCollapsedDescendants ? 'var(--bg-secondary)' : 'var(--card-bg)',
+                  boxShadow: '0 1px 3px 0 var(--shadow-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  zIndex: 20
+                }}
                 title={node.isCollapsedDescendants ? "Mostra discendenti" : "Nascondi discendenti"}
             >
-                <ChevronDown size={14} className={node.isCollapsedDescendants ? "text-blue-600 rotate-180" : "text-gray-500"} />
+                <ChevronDown size={14} color={node.isCollapsedDescendants ? "var(--primary)" : "var(--text-secondary)"} style={{ transform: node.isCollapsedDescendants ? 'rotate(180deg)' : 'none' }} />
             </button>
 
             {/* Add Parent Button */}
@@ -126,18 +157,18 @@ const NodeCard = memo(({
                     )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                    <h3 style={{ fontWeight: 'bold', margin: 0, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <h3 style={{ fontWeight: 'bold', margin: 0, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-main)' }}>
                         {node.firstName} <span style={{ textTransform: 'uppercase', fontSize: '0.8rem', opacity: 0.7 }}>{node.lastName}</span>
                     </h3>
-                    <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>
+                    <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                          {yearRange}
                     </p>
                 </div>
                 <div className="flex flex-col gap-1">
-                     <button onClick={() => onEdit(node)} className="text-gray-400 hover:text-blue-500" title="Modifica">
+                     <button onClick={() => onEdit(node)} style={{ color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }} title="Modifica">
                         <User size={14} />
                     </button>
-                    <button onClick={() => onDelete(node._id)} className="text-gray-400 hover:text-red-500" title="Elimina">
+                    <button onClick={() => onDelete(node._id)} style={{ color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }} title="Elimina">
                         <Trash2 size={14} />
                     </button>
                 </div>
