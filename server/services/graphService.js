@@ -203,9 +203,17 @@ class GraphService {
                 // Includiamo la union se:
                 // 1. Il nodo corrente è espanso.
                 // 2. Uno dei figli della union è già stato visitato (i.e. stiamo risalendo dal figlio al genitore).
+                // 3. SEMPRE? Mostrare i partner è fondamentale per capire il contesto, occupano poco spazio orizzontale.
+                //    Se nascondiamo i partner, l'albero sembra "single parent".
+                
+                // DECISIONE: Mostriamo sempre le unions (quindi i partner), ma NON carichiamo i figli se non espanso.
+                // Questo risolve "vedo mio nonno ma non vedo mia nonna".
+                const shouldShowUnion = true; // Semplificazione drastica ma efficace.
+                
+                // Calcoliamo isLegacyConnection per sapere se mostrare i figli anche se non espanso
                 const isLegacyConnection = union.childrenIds.some(cid => visited.has(cid.toString()));
 
-                if (isExpanded || isLegacyConnection) {
+                if (shouldShowUnion) {
                     if (!unionsMap.has(unionId)) {
                         unionsMap.set(unionId, {
                             _id: unionId,
@@ -221,21 +229,21 @@ class GraphService {
                     union.partnerIds.forEach(pid => {
                         const pStr = pid.toString();
                         if (pStr !== personId && !visited.has(pStr)) {
-                             // Il partner viene caricato "passivamente", non innesca sua espansione 
-                             // (sourceIsExpanded = false per lui, a meno che non fosse già in expandedSet)
                              queue.push({ personId: pStr, generation, sourceIsExpanded: false });
                         }
                     });
 
                     // Aggiungi figli (gen + 1)
-                    union.childrenIds.forEach(cid => {
-                        const cStr = cid.toString();
-                        if (!visited.has(cStr)) {
-                            // Se il genitore è espanso, il figlio espande i suoi.
-                            // Se il genitore NON è espanso (ma siamo qui per legacy/focus), il figlio è caricato "chiuso".
-                            queue.push({ personId: cStr, generation: generation + 1, sourceIsExpanded: isExpanded });
-                        }
-                    });
+                    // SOLO se il nodo è espanso, oppure se stiamo tracciando una connessione già esistente (Legacy).
+                    // Se mostriamo solo il partner per completezza (shouldShowUnion=true ma !isExpanded), NON dobbiamo scendere nei figli.
+                    if (isExpanded || isLegacyConnection) {
+                        union.childrenIds.forEach(cid => {
+                            const cStr = cid.toString();
+                            if (!visited.has(cStr)) {
+                                queue.push({ personId: cStr, generation: generation + 1, sourceIsExpanded: isExpanded });
+                            }
+                        });
+                    }
                 }
                 
                 // Conteggi per badge

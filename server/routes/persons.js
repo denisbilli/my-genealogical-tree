@@ -223,6 +223,23 @@ router.put('/:id', auth, uploadLimiter, upload.single('photo'), async (req, res)
             { _id: { $in: updateData.parents }, userId: req.userId },
             { $addToSet: { children: person._id } }
          );
+
+         // === AUTO-LINK PARENTS ===
+         // Se la persona ha ora 2 genitori, crea automaticamente una Union tra loro
+         // e aggiungi questa persona come figlio della Union.
+         // Filtra solo i genitori 'bio' o quelli appena aggiunti
+         const currentParents = person.parentRefs.filter(ref => ref.type === 'bio' || !ref.type);
+         
+         if (currentParents.length === 2) {
+             const [p1, p2] = currentParents;
+             try {
+                 const union = await GraphService.createUnion(p1.parentId, p2.parentId, req.userId);
+                 await GraphService.addChildToUnion(union._id, person._id);
+                 console.log(`Auto-linked parents ${p1.parentId} & ${p2.parentId} for child ${person._id}`);
+             } catch (err) {
+                 console.error("Auto-link parents failed", err);
+             }
+         }
     }
     
     // ========== AGGIORNA CHILDREN ==========
