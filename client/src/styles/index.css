@@ -173,7 +173,7 @@ body {
 }
 
 .btn-add-parent {
-  left: 50%;
+  left: 20%; /* Spostato a sinistra per non sovrapporsi al badge */
   transform: translateX(-50%);
   top: -12px;
   background-color: var(--primary);
@@ -184,7 +184,7 @@ body {
 }
 
 .btn-add-child {
-  left: 50%;
+  left: 20%; /* Spostato a sinistra per non sovrapporsi al badge */
   transform: translateX(-50%);
   bottom: -12px;
   background-color: #22c55e;

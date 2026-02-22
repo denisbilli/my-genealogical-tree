@@ -23,11 +23,9 @@ function TreeView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedNodeId, setHighlightedNodeId] = useState(null);
 
-  // Collapse State
-  const [collapsedState, setCollapsedState] = useState({
-      descendants: new Set(),
-      ancestors: new Set()
-  });
+  // Expanded State (Instead of Collapsed)
+  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [focusPersonId, setFocusPersonId] = useState(null);
   
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
@@ -62,40 +60,48 @@ function TreeView() {
       }
   };
 
-  const handleToggleCollapse = (personId, direction) => {
-      // direction: 'up' (ancestors) or 'down' (descendants)
-      setCollapsedState(prev => {
-          const key = direction === 'up' ? 'ancestors' : 'descendants';
-          const newSet = new Set(prev[key]);
-          
+  // Imposta una nuova radice e resetta le espansioni
+  const handleSetRoot = (personId) => {
+      setFocusPersonId(personId);
+      setExpandedIds(new Set()); // Reset: mostra solo intorno al focus
+  };
+
+  // Espande o Collassa un nodo specifico (toggle)
+  const handleExpandNode = (personId) => {
+      setExpandedIds(prev => {
+          const newSet = new Set(prev);
           if (newSet.has(personId)) {
-              newSet.delete(personId);
+              newSet.delete(personId); // Collassa
           } else {
-              newSet.add(personId);
+              newSet.add(personId); // Espandi
           }
-          
-          return {
-              ...prev,
-              [key]: newSet
-          };
+          return newSet;
       });
   };
 
-  // Reload tree when collapsed state changes
+  // Collassa tutto (torna alla vista base del focus corrente)
+  const handleCollapseAll = () => {
+      setExpandedIds(new Set());
+  };
+
+  // Reload tree when focus or expanded state changes
   useEffect(() => {
-      if (persons.length > 0) {
+      if (focusPersonId) {
+          loadTree(focusPersonId);
+      } else if (persons.length > 0) {
+          // Initialize with first person found as focus if none set
           const root = persons.find(p => !p.parents || p.parents.length === 0) || persons[0];
-          loadTree(root._id);
+          setFocusPersonId(root._id);
       }
-  }, [collapsedState]);
+  }, [focusPersonId, expandedIds, persons.length]); // depend on persons.length to retry if empty initially
 
   const handleSelectSearchResult = (personId) => {
+      // Quando cerco, voglio vedere quella persona. 
+      // Opzione 1: Cambio il focus su di lei.
+      setFocusPersonId(personId);
+      setExpandedIds(new Set()); // Reset view around found person
       setHighlightedNodeId(personId);
-      setSearchTerm(''); // Clear search or keep it? Keeping it clears the dropdown
-      
-      // Funzionalità opzionale: centra la vista sul nodo
-      // Richiede accesso al ref di transformComponent -> useTransform() o ref diretto
-      // Per semplicità ora usiamo solo highlighting
+      setSearchTerm('');
   };
 
   const filteredPersons = searchTerm 
@@ -157,7 +163,8 @@ function TreeView() {
           // Heuristic: Find a good root (no parents)
           const root = allPersons.find(p => !p.parents || p.parents.length === 0) || allPersons[0];
           console.log("Selected root:", root.firstName, root._id);
-          loadTree(root._id);
+          // Set focus will trigger loadTree via useEffect
+          setFocusPersonId(root._id);
       } else {
           console.log("No persons found, showing empty state.");
           setLoading(false);
@@ -170,10 +177,16 @@ function TreeView() {
   };
 
   const loadTree = async (focusId) => {
+      if (!focusId) return;
       setLoading(true);
       try {
           console.log(`Loading tree for focusId: ${focusId}`);
-          const res = await personService.getTree(focusId, collapsedState);
+          
+          const config = {
+              expandedIds: expandedIds // Pass Set (api service will convert)
+          };
+
+          const res = await personService.getTree(focusId, config);
           console.log("Tree data received:", res.data);
           
           // Safety check: ensure arrays
@@ -278,13 +291,51 @@ function TreeView() {
       
       else if (currentRelation === 'partner') {
          // Create Partner
-         const payload = { ...formData, spouse: JSON.stringify([pendingRelation.personId]) };
+         // ADDITIVE LOGIC: Don't overwrite existing spouses
+         // Note: Frontend state 'persons' might be incomplete or legacy. 
+         // Best practice: Let the backend handle relationships via dedicated endpoint or ensuring arrays.
+         
+         // 1. Create the new person
+         const payload = { ...formData }; // Do not set spouse here to avoid circular complexity initially
          const newPartnerRes = await personService.create(payload);
          const newPartner = newPartnerRes.data;
          
-         // Link Current -> Partner
-         const currentPerson = persons.find(p => p._id === pendingRelation.personId);
-         let currentSpouses = [];
+         // 2. Create the Union (Relationship)
+         // We use the specific endpoint for creating relationships which handles Unions correctly
+         // Instead of just updating "spouse" array (Legacy).
+         // However, if we must use legacy update:
+         try {
+             const currentPerson = persons.find(p => p._id === pendingRelation.personId);
+             let currentSpouses = [];
+             if (currentPerson && currentPerson.spouse) {
+                currentSpouses = currentPerson.spouse.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
+             }
+             
+             // Add new partner ID
+             currentSpouses.push(newPartner._id);
+             
+             // Update Current Person
+             await personService.update(currentPerson._id, {
+                 spouse: JSON.stringify(currentSpouses)
+             });
+             
+             // Update Partner Person (reciprocal)
+             await personService.update(newPartner._id, {
+                 spouse: JSON.stringify([currentPerson._id])
+             });
+             
+             // ALSO: Trigger Union Creation properly
+             await personService.addRelationship(pendingRelation.personId, {
+                 partnerId: newPartner._id,
+                 type: 'relationship'
+             });
+             
+         } catch (err) {
+             console.error("Partner linking failed", err);
+         }
+      } 
+      
+      else if (currentRelation === 'sibling') {
          if (currentPerson && currentPerson.spouse) {
             currentSpouses = currentPerson.spouse.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
          }
@@ -353,9 +404,10 @@ function TreeView() {
               strokeColor = '#ec4899'; // Rosa per partner
               strokeWidth = '3';
           } else {
-              // Curva per i figli
+              // Linee squadrate (Orthogonal) per i figli
               const midY = (fy + ty) / 2;
-              pathD = `M ${fx} ${fy} C ${fx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`;
+              // M start -> V middle -> H targetX -> V end
+              pathD = `M ${fx} ${fy} V ${midY} H ${tx} V ${ty}`;
               
               // Colori e stili in base al tipo di parentela
               if (edge.parentalType === 'bio') {
@@ -625,13 +677,17 @@ function TreeView() {
                                             // Pass modified coordinates shifted by bounds
                                             node={{ ...node, x: node.x - bounds.minX, y: node.y - bounds.minY }}
                                             isHighlighted={node._id === highlightedNodeId}
+                                            isFocus={node._id === focusPersonId}
                                             onAddParent={initiateAddParent}
                                             onAddPartner={initiateAddPartner}
                                             onAddSibling={initiateAddSibling}
                                             onAddChild={initiateAddChild}
                                             onEdit={initiateEdit}
                                             onDelete={deletePerson}
-                                            onUnionClick={handleUnionClick}                                            onToggleCollapse={handleToggleCollapse}                                        />
+                                            onUnionClick={handleUnionClick}
+                                            onSetFocus={handleSetRoot}
+                                            onExpandNode={handleExpandNode}
+                                        />
                                      ))}
                             </div>
                         </TransformComponent>

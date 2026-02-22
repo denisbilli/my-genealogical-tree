@@ -8,15 +8,13 @@ const Union = require('../models/Union');
 // Get Tree Graph
 router.get('/:personId', auth, async (req, res) => {
     try {
-        const collapsedDescendants = req.query.collapsedDescendants ? req.query.collapsedDescendants.split(',') : [];
-        const collapsedAncestors = req.query.collapsedAncestors ? req.query.collapsedAncestors.split(',') : [];
+        const expandedIds = req.query.expandedIds ? req.query.expandedIds.split(',') : [];
 
-        const collapseConfig = {
-            hideDescendants: collapsedDescendants,
-            hideAncestors: collapsedAncestors
+        const config = {
+            expandedIds
         };
 
-        const { nodes, unions } = await GraphService.getGraph(req.params.personId, req.userId, collapseConfig);
+        const { nodes, unions } = await GraphService.getGraph(req.params.personId, req.userId, config);
         const layout = GraphService.computeLayout(nodes, unions);
         res.json(layout);
     } catch (e) {

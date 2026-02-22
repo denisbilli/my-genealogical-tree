@@ -15,6 +15,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Handle 401 responses
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Token expired or invalid
+      authService.logout();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+
 export const authService = {
   register: (userData) => api.post('/auth/register', userData),
   login: (credentials) => api.post('/auth/login', credentials),
@@ -57,14 +71,17 @@ export const personService = {
     });
   },
   delete: (id) => api.delete(`/persons/${id}`),
-  getTree: (personId, collapsedState = {}) => {
+  getTree: (personId, config = {}) => {
       const params = new URLSearchParams();
-      if (collapsedState.descendants && collapsedState.descendants.size > 0) {
-          params.append('collapsedDescendants', Array.from(collapsedState.descendants).join(','));
+      // Se config.expandedIds esiste ed è un Set o Array
+      const expanded = config.expandedIds 
+          ? (config.expandedIds instanceof Set ? Array.from(config.expandedIds) : config.expandedIds) 
+          : [];
+
+      if (expanded.length > 0) {
+          params.append('expandedIds', expanded.join(','));
       }
-      if (collapsedState.ancestors && collapsedState.ancestors.size > 0) {
-          params.append('collapsedAncestors', Array.from(collapsedState.ancestors).join(','));
-      }
+      
       const queryString = params.toString();
       return api.get(`/tree/${personId}${queryString ? '?' + queryString : ''}`);
   },

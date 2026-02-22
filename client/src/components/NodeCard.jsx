@@ -11,8 +11,10 @@ const NodeCard = memo(({
     onEdit, 
     onDelete,
     onUnionClick,
-    onToggleCollapse,
-    isHighlighted
+    onSetFocus,
+    onExpandNode,
+    isHighlighted,
+    isFocus
 }) => {
     // console.log("Rendering Node:", node._id, node.firstName, node.x, node.y);
     // We map 'node' which comes from layout back to 'person' structure
@@ -70,63 +72,158 @@ const NodeCard = memo(({
                 top: node.y,
                 transform: 'translate(-50%, -50%)', // Center on coordinate
                 margin: 0, // Reset margin from CSS class
-                border: isHighlighted ? '4px solid #fcd34d' : (node.isPartner ? '2px solid #fca5a5' : undefined),
-                boxShadow: isHighlighted ? '0 0 15px rgba(252, 211, 77, 0.8)' : undefined,
+                border: isFocus ? '3px solid var(--primary)' : (isHighlighted ? '4px solid #fcd34d' : (node.isPartner ? '2px solid #fca5a5' : undefined)),
+                boxShadow: isFocus ? '0 0 20px rgba(59, 130, 246, 0.5)' : (isHighlighted ? '0 0 15px rgba(252, 211, 77, 0.8)' : undefined),
                 width: 250, // Fixed width
                 height: 100, // Fixed height
-                zIndex: isHighlighted ? 10 : 1
+                zIndex: isHighlighted || isFocus ? 10 : 1
             }}
         >
-            {/* Collapse Buttons */}
-            {/* Top - Hide Ancestors - Moved to Right to avoid overlap with + button */}
+            {/* Focus / Center Button */}
             <button 
-                onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'up'); }}
+                onClick={(e) => { e.stopPropagation(); onSetFocus(node._id); }}
                 style={{
                   position: 'absolute',
-                  top: '-0.75rem',
-                  right: '2rem',
-                  width: '1.5rem',
-                  height: '1.5rem',
-                  borderRadius: '50%',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: node.isCollapsedAncestors ? 'var(--bg-secondary)' : 'var(--card-bg)',
-                  boxShadow: '0 1px 3px 0 var(--shadow-color)',
+                  top: '-15px',
+                  left: '-15px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  background: isFocus ? 'var(--primary)' : 'var(--card-bg)',
+                  border: '2px solid var(--primary)',
+                  borderRadius: '50%',
+                  width: 30,
+                  height: 30,
                   cursor: 'pointer',
-                  transition: 'background-color 0.2s',
-                  zIndex: 20
+                  opacity: isFocus ? 1 : 0.7,
+                  transition: 'all 0.2s',
+                  zIndex: 25,
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
                 }}
-                title={node.isCollapsedAncestors ? "Mostra antenati" : "Nascondi antenati"}
+                onMouseEnter={e => {
+                    if(!isFocus) {
+                        e.currentTarget.style.opacity = 1;
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                    }
+                }}
+                onMouseLeave={e => {
+                    if(!isFocus) {
+                        e.currentTarget.style.opacity = 0.7;
+                        e.currentTarget.style.transform = 'scale(1)';
+                    }
+                }}
+                title="Centra albero su questa persona"
             >
-                <ChevronUp size={14} color={node.isCollapsedAncestors ? "var(--primary)" : "var(--text-secondary)"} style={{ transform: node.isCollapsedAncestors ? 'rotate(180deg)' : 'none' }} />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFocus ? 'white' : 'var(--primary)' }}></div>
             </button>
 
-            {/* Bottom - Hide Descendants - Moved to Right to avoid overlap with + button */}
-            <button 
-                onClick={(e) => { e.stopPropagation(); onToggleCollapse(node._id, 'down'); }}
-                style={{
-                  position: 'absolute',
-                  bottom: '-0.75rem',
-                  right: '2rem',
-                  width: '1.5rem',
-                  height: '1.5rem',
-                  borderRadius: '50%',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: node.isCollapsedDescendants ? 'var(--bg-secondary)' : 'var(--card-bg)',
-                  boxShadow: '0 1px 3px 0 var(--shadow-color)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
-                  zIndex: 20
-                }}
-                title={node.isCollapsedDescendants ? "Mostra discendenti" : "Nascondi discendenti"}
-            >
-                <ChevronDown size={14} color={node.isCollapsedDescendants ? "var(--primary)" : "var(--text-secondary)"} style={{ transform: node.isCollapsedDescendants ? 'rotate(180deg)' : 'none' }} />
-            </button>
+             {/* Ancestors Badge (+N) - Top Center OR Collapse Button */}
+             {!isFocus && node.isExpanded ? (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onExpandNode(node._id); }} // onExpandNode acts as toggle
+                    style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: 'var(--text-main)',
+                        borderRadius: '10px',
+                        padding: '2px 8px',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        zIndex: 30,
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                    }}
+                    title="Nascondi ramo"
+                >
+                    <ChevronUp size={12} style={{ transform: 'rotate(180deg)' }}/> Nascondi
+                </button>
+             ) : (
+                 node.badgeAncestors > 0 && (
+                    <div 
+                        onClick={(e) => { e.stopPropagation(); onExpandNode(node._id); }}
+                        style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            backgroundColor: 'var(--primary)',
+                            color: 'white',
+                            borderRadius: '10px',
+                            padding: '2px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            zIndex: 30,
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}
+                        title="Mostra genitori nascosti"
+                    >
+                        +{node.badgeAncestors} Genitori
+                    </div>
+                 )
+             )}
+
+            {/* Descendants Badge (+N) - Bottom Center OR Collapse Button */}
+            {/* Show HIDE button if:
+                1. Not Focus (Focus always shows children)
+                2. Expanded explicity OR has visible children (synced with partner)
+            */}
+            
+            {!isFocus && (node.isExpanded || node.hasVisibleChildren) ? (
+                 <button
+                    onClick={(e) => { e.stopPropagation(); onExpandNode(node._id); }}
+                    style={{
+                        position: 'absolute',
+                        bottom: '-12px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: 'var(--text-main)',
+                        borderRadius: '10px',
+                        padding: '2px 8px',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        zIndex: 30,
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                    }}
+                    title="Nascondi ramo"
+                >
+                    <ChevronDown size={12} style={{ transform: 'rotate(180deg)' }}/> Nascondi
+                </button>
+            ) : (
+                node.badgeDescendants > 0 && (
+                <div 
+                    onClick={(e) => { e.stopPropagation(); onExpandNode(node._id); }}
+                    style={{
+                        position: 'absolute',
+                        bottom: '-10px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: 'var(--primary)',
+                        color: 'white',
+                        borderRadius: '10px',
+                        padding: '2px 8px',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        zIndex: 30,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
+                    title="Mostra discendenti nascosti"
+                >
+                    +{node.badgeDescendants} Figli
+                </div>
+            ))}
 
             {/* Add Parent Button */}
             <button className="btn-add-parent" onClick={(e) => { e.stopPropagation(); onAddParent(node); }} title="Aggiungi Genitore">

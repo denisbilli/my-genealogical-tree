@@ -80,143 +80,222 @@ class GraphService {
 
     /**
      * Costruisce il grafo genealogico completo centrato su una persona
+     * NUOVA LOGICA: Focus-Centric
+     * Mostra il focus, i suoi parenti diretti (genitori, figli, partner).
+     * Tutto il resto è nascosto a meno che non sia specificato in "expandedIds".
+     * Restituisce meta-dati per i nodi di confine per mostrare i badge.
+     * 
      * @param {string} focusId - ID della persona focus
      * @param {string} userId - ID dell'utente
-     * @param {Object} collapseConfig - Configurazione collassamento { hideDescendants: [], hideAncestors: [] }
+     * @param {Object} config - { expandedIds: [] }
      * @returns {Object} { nodes, unions }
      */
-    static async getGraph(focusId, userId, collapseConfig = { hideDescendants: [], hideAncestors: [] }) {
-        const nodesMap = new Map();  // personId -> personData
-        const unionsMap = new Map(); // unionId -> unionData
-        const visited = new Set();   // IDs già visitati
-        const hiddenDescendantsOf = new Set(collapseConfig.hideDescendants || []);
-        const hiddenAncestorsOf = new Set(collapseConfig.hideAncestors || []);
+    static async getGraph(focusId, userId, config = { expandedIds: [] }) {
+        const nodesMap = new Map();
+        const unionsMap = new Map();
+        const visited = new Set();
+        
+        // Set di ID esplicitamente espansi dall'utente
+        const expandedSet = new Set((config.expandedIds || []).map(id => id.toString()));
+        // Il focus è sempre "espanso" nel senso che vediamo i suoi vicini
+        expandedSet.add(focusId.toString());
 
-        // BFS: { personId, generation }
-        const queue = [{ personId: focusId.toString(), generation: 0 }];
+        // Queue per BFS: { personId, generation, sourceId }
+        // sourceId è il nodo da cui arriviamo. Se sourceId è "espanso", carichiamo questo nodo.
+        // Se questo nodo NON è "espanso", ci fermiamo qui (diventa un nodo foglia visuale), controllando solo se ha ulteriori connessioni.
+        const queue = [{ personId: focusId.toString(), generation: 0, sourceIsExpanded: true }];
 
+        // Cache veloce per lookup genitori/figli per i contatori
+        // Non possiamo fare query per ogni nodo foglia, sarebbe lento.
+        // Strategia: Carichiamo "un po' di più" o facciamo query mirate aggregate?
+        // Per ora facciamo query puntuali ottimizzate o ci affidiamo al fatto che carichiamo i dati della persona.
+        
         while (queue.length > 0) {
-            const { personId, generation } = queue.shift();
+            const { personId, generation, sourceIsExpanded } = queue.shift();
             
             if (visited.has(personId)) continue;
+            // Se la sorgente non era espansa, non dovremmo nemmeno essere qui, 
+            // a meno che questo nodo non sia stato raggiunto per altra via.
+            // Ma per sicurezza processiamo.
+            
             visited.add(personId);
 
             // Carica la persona
             const person = await Person.findOne({ _id: personId, userId });
             if (!person) continue;
 
-            // Aggiungi al grafo
-            nodesMap.set(personId, {
+            const isExpanded = expandedSet.has(personId);
+
+            // Calcola i contatori per i badge (Parenti/Figli)
+            // Nota: Queste info sono parzialmente nell'oggetto person (parents, children legacy o parentRefs, unionIds)
+            // Dobbiamo sapere quanti di questi NON sono già nel grafo visualizzato.
+            // Poiché stiamo costruendo il grafo ora, è difficile saperlo in anticipo.
+            // Soluzione: Carichiamo tutto ciò che è direttamente connesso.
+            // Se `isExpanded` è false, non aggiungiamo quei vicini alla coda BFS, ma li contiamo.
+
+            const nodeData = {
                 ...person.toObject(),
                 _id: personId,
                 generation,
                 kind: 'person',
-                // Flag per frontend per sapere se è collassato
-                isCollapsedDescendants: hiddenDescendantsOf.has(personId),
-                isCollapsedAncestors: hiddenAncestorsOf.has(personId)
-            });
+                isExpanded, // Flag frontend
+                // Counters placeholder
+                badgeAncestors: 0,
+                badgeDescendants: 0
+            };
+            
+            nodesMap.set(personId, nodeData);
 
-            // ========== ANTENATI (genitori) ==========
-            // Se questo nodo non ha gli antenati nascosti
-            if (!hiddenAncestorsOf.has(personId)) {
-                const parentIds = this._getParentIds(person);
-                for (const parentId of parentIds) {
-                    if (!visited.has(parentId)) {
-                        queue.push({ 
-                            personId: parentId, 
-                            generation: generation - 1 
-                        });
+            // Se il nodo da cui arriviamo NON era espanso, questo nodo è un "terminale" visivo.
+            // Non esploriamo i suoi vicini, MA dobbiamo contarli per i badge.
+            // Però aspetta: se io sono il figlio di un nodo non espanso...
+            // La logica corretta è: 
+            // Espando i vicini SOLO SE `isExpanded` è true.
+            
+            // Recupera TUTTI i parenti potenziali per contarli
+            const parentIds = this._getParentIds(person);
+            
+            // Recupera TUTTE le unioni (per partner e figli)
+            const personUnions = await Union.find({ userId, partnerIds: personId });
+            
+            // Calcolo Badge Ancestors
+            // Un antenato contribuisce al badge se NON è stato visitato E non verrà visitato (cioè non è in queue)
+            // O più semplicemente: se NON carichiamo questo ramo, il badge è il numero totale di genitori.
+            if (!isExpanded) {
+                // Se non espando, tutti i genitori sono "nascosti" (eccetto forse quello da cui arrivo, se arrivo da sopra)
+                // Ma per semplicità, il badge indica "ci sono cose di là".
+                // Raffinamento: escludiamo dal conteggio il nodo da cui siamo arrivati nella BFS? 
+                // Troppo complesso tracciare la direzione.
+                // Semplificazione: Badge = Count(Parents) - Count(VisibleParents)
+                // Lo calcoliamo alla fine del ciclo while per esattezza.
+            } else {
+                // Se espanso, aggiungi genitori alla coda
+                for (const pid of parentIds) {
+                    if (!visited.has(pid)) {
+                        queue.push({ personId: pid, generation: generation - 1, sourceIsExpanded: true });
                     }
                 }
             }
 
-            // ========== DISCENDENTI E PARTNER ==========
-            // Trova tutte le unions dove questa persona è partner
-            const personUnions = await Union.find({
-                userId,
-                partnerIds: personId
-            });
-
+            // Gestione Discendenti e Partner (Unions)
+            let totalChildrenCount = 0;
+            
             for (const union of personUnions) {
                 const unionId = union._id.toString();
                 
-                // Evita duplicati di Union già processate
-                if (unionsMap.has(unionId)) continue;
-
-                // Aggiungi union al grafo
-                unionsMap.set(unionId, {
-                    _id: unionId,
-                    partnerIds: union.partnerIds.map(id => id.toString()),
-                    childrenIds: union.childrenIds.map(id => id.toString()),
-                    type: union.type,
-                    generation,
-                    kind: 'union'
-                });
-
-                // Aggiungi il partner (stessa generazione)
-                const partnerId = union.partnerIds
-                    .map(id => id.toString())
-                    .find(id => id !== personId);
+                // I partner vengono visualizzati sempre se il nodo è visibile? 
+                // Diciamo di sì, il partner fa parte del nucleo.
+                // Oppure: mostriamo partner solo se c'è connessione rilevante?
+                // Nel design "Family Tree", vedere i partner è standard.
                 
-                if (partnerId && !visited.has(partnerId)) {
-                    queue.push({ 
-                        personId: partnerId, 
-                        generation: generation // Partner stays in same generation
-                    });
-                }
+                // Se il nodo è espanso, carichiamo le unioni e i figli
+                // Se il nodo NON è espanso, dobbiamo contare i figli per il badge e mostrare i partner?
+                // Dubbio: se ho 3 mogli e sono "chiuso", vedo le 3 mogli?
+                // Proposta: Se chiuso, vedo solo la linea diretta (se arrivo da figlio/partner).
+                // Se sono il focus, vedo tutto.
+                
+                // Semplificazione richiesta utente: "Visualizzare/nascondere ramificazioni".
+                // Facciamo che se non è espanso, non mostriamo né partner né figli (eccetto quello di provenienza).
+                // MA i partner sono cruciali per visualizzare i figli.
+                // Compromesso: Se non espanso, NON mostriamo figli. I partner li mostriamo solo se servono (es. link grafico).
+                // Ma per ora lasciamo i partner visibili sulla riga della generazione, occupa poco spazio.
 
-                // Aggiungi i figli (generazione successiva)
-                // SOLO SE NON SONO NASCOSTI per questo nodo (personId)
-                if (!hiddenDescendantsOf.has(personId)) {
-                    for (const childId of union.childrenIds) {
-                        const childIdStr = childId.toString();
-                        if (!visited.has(childIdStr)) {
-                            queue.push({ 
-                                personId: childIdStr, 
-                                generation: generation + 1 
-                            });
-                        }
-                    }
-                }
-            }
+                // Includiamo la union se:
+                // 1. Il nodo corrente è espanso.
+                // 2. Uno dei figli della union è già stato visitato (i.e. stiamo risalendo dal figlio al genitore).
+                const isLegacyConnection = union.childrenIds.some(cid => visited.has(cid.toString()));
 
-            // ========== GESTIONE FIGLI SENZA UNION (legacy/fallback) ==========
-            // Se sono nascosti, salta anche questi
-            if (!hiddenDescendantsOf.has(personId)) {
-                const childrenIds = this._getChildrenIds(person);
-                const childrenInUnions = new Set(
-                    Array.from(unionsMap.values())
-                        .flatMap(u => u.childrenIds)
-                );
-
-                for (const childId of childrenIds) {
-                    if (!childrenInUnions.has(childId) && !visited.has(childId)) {
-                        // Crea virtual union per questo figlio
-                        const virtualUnionId = `virtual-${personId}-${childId}`;
-                        
-                        if (!unionsMap.has(virtualUnionId)) {
-                            unionsMap.set(virtualUnionId, {
-                                _id: virtualUnionId,
-                                partnerIds: [personId],
-                                childrenIds: [childId],
-                                type: 'unknown',
-                                generation,
-                                kind: 'union',
-                                isVirtual: true
-                            });
-                        }
-
-                        queue.push({ 
-                            personId: childId, 
-                            generation: generation + 1 
+                if (isExpanded || isLegacyConnection) {
+                    if (!unionsMap.has(unionId)) {
+                        unionsMap.set(unionId, {
+                            _id: unionId,
+                            partnerIds: union.partnerIds.map(id => id.toString()),
+                            childrenIds: union.childrenIds.map(id => id.toString()),
+                            type: union.type,
+                            generation,
+                            kind: 'union'
                         });
                     }
+
+                    // Aggiungi partner (stessa gen)
+                    union.partnerIds.forEach(pid => {
+                        const pStr = pid.toString();
+                        if (pStr !== personId && !visited.has(pStr)) {
+                             // Il partner viene caricato "passivamente", non innesca sua espansione 
+                             // (sourceIsExpanded = false per lui, a meno che non fosse già in expandedSet)
+                             queue.push({ personId: pStr, generation, sourceIsExpanded: false });
+                        }
+                    });
+
+                    // Aggiungi figli (gen + 1)
+                    union.childrenIds.forEach(cid => {
+                        const cStr = cid.toString();
+                        if (!visited.has(cStr)) {
+                            // Se il genitore è espanso, il figlio espande i suoi.
+                            // Se il genitore NON è espanso (ma siamo qui per legacy/focus), il figlio è caricato "chiuso".
+                            queue.push({ personId: cStr, generation: generation + 1, sourceIsExpanded: isExpanded });
+                        }
+                    });
                 }
+                
+                // Conteggi per badge
+                totalChildrenCount += union.childrenIds.length;
             }
+            
+            // Store raw counts for post-processing
+            nodeData._rawParentIds = parentIds;
+            nodeData._rawTotalChildren = totalChildrenCount; // Approx, duplicates possible across unions? No, children unique to union usually.
+        }
+
+        // POST-PROCESSING: Calcolo Badge
+        // Ora sappiamo esattamente quali nodi sono in `nodesMap`. (E `unionsMap`)
+        // Dobbiamo re-iterare `nodesMap` per calcolare i badge correttamente
+        const nodesArray = Array.from(nodesMap.values());
+        
+        for (const node of nodesArray) {
+             // 1. Calcolo Ancestors Hidden Badge
+             // Quanti genitori NON sono presenti nella nodesMap?
+             const visibleParentsCount = node._rawParentIds.filter(pid => nodesMap.has(pid)).length;
+             node.badgeAncestors = Math.max(0, node._rawParentIds.length - visibleParentsCount);
+
+             // 2. Calcolo Descendants Hidden Badge
+             // Quanti figli NON sono presenti nella nodesMap?
+             // Dobbiamo sapere quanti figli totali ha (che è _rawTotalChildren, ma attento a legacy e overlap).
+             // Per sicurezza diciamo che _rawTotalChildren è affidabile (somma size childrenIds di tutte le unions).
+             
+             // Cerchiamo i figli visibili
+             // Un nodo N è figlio visibile di node se:
+             // - N è in nodesMap
+             // - Una union in unionsMap (quindi visibile) collega node -> N
+             // OPPURE 
+             // - N ha node come genitore (metodo robusto)
+             
+             // Metodo robusto: scansiona tutti i nodi visibili e conta quanti dicono "il mio genitore è node._id"
+             let visibleChildrenCount = 0;
+             for (const potentialChild of nodesArray) {
+                 // Controlla se 'potentialChild' ha 'node._id' tra i suoi genitori
+                 // Usiamo i dati grezzi salvati in _rawParentIds se disponibili, altrimenti ricalcoliamo
+                 // Ma _rawParentIds sono stringhe ID
+                 if (potentialChild._rawParentIds && potentialChild._rawParentIds.includes(node._id.toString())) { // FIX: toString() check
+                     visibleChildrenCount++;
+                 }
+             }
+             
+             // Se HO figli visibili (visibleChildrenCount > 0), allora considero il nodo come "aperto verso il basso"
+             // anche se in expandedIds non c'era lui ma il suo partner.
+             // Questo flag aiuta il frontend a decidere se mostrare il pulsante "Nascondi" o il badge "+".
+             node.hasVisibleChildren = visibleChildrenCount > 0;
+             
+             // Il badge conta solo quelli propriamente nascosti
+             node.badgeDescendants = Math.max(0, node._rawTotalChildren - visibleChildrenCount);
+
+             // Cleanup helper props
+             delete node._rawParentIds;
+             delete node._rawTotalChildren;
         }
 
         return {
-            nodes: Array.from(nodesMap.values()),
+            nodes: nodesArray,
             unions: Array.from(unionsMap.values())
         };
     }
