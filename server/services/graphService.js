@@ -395,6 +395,9 @@ class GraphService {
             });
         }
 
+        // POST-PROCESSING: Allinea le union sopra al centro dei figli
+        this._alignUnionsOverChildren(finalNodes, unions);
+
         // Crea gli edge con informazioni dettagliate
         unions.forEach(union => {
             // Person -> Union (linee dei partner)
@@ -452,6 +455,127 @@ class GraphService {
         });
 
         return { nodes: finalNodes, edges };
+    }
+
+    /**
+     * POST-LAYOUT: Allinea le union sopra al centro dei figli.
+     * Processa dal basso verso l'alto per propagare l'allineamento correttamente.
+     * Se 1 figlio: union.x = figlio.x
+     * Se 2 figli: union.x = (figlio1.x + figlio2.x) / 2
+     * ecc.
+     */
+    static _alignUnionsOverChildren(finalNodes, unions) {
+        if (!unions || unions.length === 0) return;
+
+        const nodeMap = new Map(finalNodes.map(n => [n._id.toString(), n]));
+
+        // Ottieni tutte le generazioni presenti
+        const genSet = new Set();
+        finalNodes.forEach(n => {
+            if (n.generation !== undefined) genSet.add(n.generation);
+        });
+        const sortedGensBottomUp = Array.from(genSet).sort((a, b) => b - a);
+
+        // Passo 1: Centra ogni union sopra i suoi figli (bottom-up)
+        for (const gen of sortedGensBottomUp) {
+            const genUnions = unions.filter(u => u.generation === gen);
+
+            for (const union of genUnions) {
+                const unionNode = nodeMap.get(union._id.toString());
+                if (!unionNode) continue;
+
+                // Trova i figli visibili nel layout
+                const childrenNodes = (union.childrenIds || [])
+                    .map(cid => nodeMap.get(cid.toString()))
+                    .filter(Boolean);
+
+                if (childrenNodes.length === 0) continue;
+
+                // Calcola il centro X dei figli
+                const childrenCenterX = childrenNodes.reduce((sum, c) => sum + c.x, 0) / childrenNodes.length;
+
+                // Calcola lo spostamento necessario
+                const shift = childrenCenterX - unionNode.x;
+                if (Math.abs(shift) < 1) continue;
+
+                // Sposta l'intero gruppo famiglia (union + partner)
+                unionNode.x += shift;
+                union.partnerIds.forEach(pid => {
+                    const partner = nodeMap.get(pid.toString());
+                    if (partner) partner.x += shift;
+                });
+            }
+        }
+
+        // Passo 2: Risolvi sovrapposizioni per ogni generazione (dall'alto al basso)
+        const sortedGensTopDown = Array.from(genSet).sort((a, b) => a - b);
+        for (const gen of sortedGensTopDown) {
+            // Ordina le persone per X
+            const genPersons = finalNodes
+                .filter(n => n.generation === gen && n.kind === 'person')
+                .sort((a, b) => a.x - b.x);
+
+            let overlapResolved = false;
+            for (let i = 1; i < genPersons.length; i++) {
+                const gap = genPersons[i].x - genPersons[i - 1].x;
+                if (gap < GraphService.X_SPACING) {
+                    const pushAmount = GraphService.X_SPACING - gap;
+                    // Usa un set condiviso per evitare double-shifting di nodi condivisi
+                    const visited = new Set();
+                    for (let j = i; j < genPersons.length; j++) {
+                        this._shiftNodeAndDescendants(genPersons[j], pushAmount, nodeMap, unions, visited);
+                    }
+                    overlapResolved = true;
+                }
+            }
+
+            // Se abbiamo risolto sovrapposizioni, ri-centra le union tra i partner
+            if (overlapResolved) {
+                const genUnions = unions.filter(u => u.generation === gen);
+                for (const union of genUnions) {
+                    const unionNode = nodeMap.get(union._id.toString());
+                    if (!unionNode) continue;
+                    const partners = union.partnerIds
+                        .map(pid => nodeMap.get(pid.toString()))
+                        .filter(Boolean);
+                    if (partners.length === 2) {
+                        unionNode.x = (partners[0].x + partners[1].x) / 2;
+                    } else if (partners.length === 1) {
+                        unionNode.x = partners[0].x + (GraphService.X_SPACING * 0.3);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * HELPER: Sposta un nodo e tutti i suoi discendenti dello stesso delta X.
+     * Questo garantisce che spostando un genitore per risolvere sovrapposizioni,
+     * i figli si spostano insieme mantenendo l'allineamento.
+     */
+    static _shiftNodeAndDescendants(node, shift, nodeMap, unions, visited) {
+        const nodeId = node._id.toString();
+        if (visited.has(nodeId)) return;
+        visited.add(nodeId);
+
+        node.x += shift;
+
+        // Trova le union in cui questo nodo è partner
+        const personUnions = unions.filter(u =>
+            u.partnerIds.some(pid => pid.toString() === nodeId)
+        );
+
+        for (const union of personUnions) {
+            // Sposta solo i figli della union (ricorsivamente)
+            // Non spostiamo i partner: verranno gestiti dal loop esterno
+            // se sono nella stessa generazione, o dal ri-centramento union.
+            (union.childrenIds || []).forEach(cid => {
+                const childNode = nodeMap.get(cid.toString());
+                if (childNode && !visited.has(cid.toString())) {
+                    this._shiftNodeAndDescendants(childNode, shift, nodeMap, unions, visited);
+                }
+            });
+        }
     }
 
     /**
