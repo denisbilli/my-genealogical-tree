@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, LogOut, TreeDeciduous, Moon, Sun } from 'lucide-react';
+import { Plus, LogOut, TreeDeciduous, Moon, Sun, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { authService, personService } from '../services/api';
@@ -7,6 +7,7 @@ import PersonModal from '../components/PersonModal';
 import NodeCard from '../components/NodeCard';
 import UnionModal from '../components/UnionModal';
 import ErrorBoundary from '../components/ErrorBoundary';
+import FamilyTreePrint from '../components/FamilyTreePrint';
 
 function TreeView() {
   const [persons, setPersons] = useState([]); 
@@ -22,6 +23,9 @@ function TreeView() {
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedNodeId, setHighlightedNodeId] = useState(null);
+
+  // Print mode
+  const [showPrintMode, setShowPrintMode] = useState(false);
 
   // Expanded State (Instead of Collapsed)
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -564,6 +568,18 @@ function TreeView() {
                   <Plus size={16} /> Nuova Persona
                 </button>
              )}
+
+             {/* Print Mode Button */}
+             {persons.length > 0 && (
+                <button
+                  onClick={() => setShowPrintMode(true)}
+                  className="btn text-xs"
+                  style={{ backgroundColor: '#7c5c3a', color: 'white' }}
+                  title="Vista Stampa — albero genealogico classico"
+                >
+                  <Printer size={16} /> Stampa
+                </button>
+             )}
              
              {/* Dark Mode Toggle */}
              <button
@@ -716,6 +732,13 @@ function TreeView() {
             onUpdate={() => {
                 loadPersons(); // Ricarica l'albero dopo modifiche
             }}
+        />
+      )}
+
+      {showPrintMode && (
+        <FamilyTreePrint
+            treeLayout={treeLayout}
+            onClose={() => setShowPrintMode(false)}
         />
       )}
     </div>
