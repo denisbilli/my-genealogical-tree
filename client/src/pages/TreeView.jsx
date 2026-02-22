@@ -160,11 +160,15 @@ function TreeView() {
       setPersons(allPersons);
       
       if (allPersons.length > 0) {
-          // Heuristic: Find a good root (no parents)
-          const root = allPersons.find(p => !p.parents || p.parents.length === 0) || allPersons[0];
-          console.log("Selected root:", root.firstName, root._id);
-          // Set focus will trigger loadTree via useEffect
-          setFocusPersonId(root._id);
+          // Se non c'è un focus corrente (o se è stato cancellato), ne impostiamo uno di default
+          const currentFocusExists = focusPersonId && allPersons.some(p => p._id === focusPersonId);
+          
+          if (!currentFocusExists) {
+               // Heuristic: Find a good root (no parents)
+               const root = allPersons.find(p => !p.parents || p.parents.length === 0) || allPersons[0];
+               console.log("Selected root:", root.firstName, root._id);
+               setFocusPersonId(root._id);
+          }
       } else {
           console.log("No persons found, showing empty state.");
           setLoading(false);
