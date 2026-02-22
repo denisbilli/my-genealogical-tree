@@ -336,17 +336,11 @@ function TreeView() {
       } 
       
       else if (currentRelation === 'sibling') {
-         if (currentPerson && currentPerson.spouse) {
-            currentSpouses = currentPerson.spouse.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
-         }
-
-         await personService.update(currentPerson._id, { 
-             spouse: JSON.stringify([...currentSpouses, newPartner._id]) 
-         });
-      } 
-      
-      else if (currentRelation === 'sibling') {
         const currentPerson = persons.find(p => p._id === pendingRelation.personId);
+        if (!currentPerson) {
+             throw new Error("Persona di riferimento non trovata");
+        }
+        
         let parentIds = [];
         if (currentPerson && currentPerson.parents) {
             parentIds = currentPerson.parents.map(p => (p && typeof p === 'object' && p._id) ? p._id : p);
