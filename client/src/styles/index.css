@@ -529,3 +529,17 @@ body {
   color: #b91c1c;
 }
 .btn-delete:hover { background-color: #fca5a5; }
+
+/* Print Overlay */
+@media print {
+    .no-print { display: none !important; }
+    .print-overlay {
+        position: absolute !important;
+        overflow: visible !important;
+    }
+    .print-scroll-area {
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+    }
+}
