@@ -54,6 +54,7 @@ export const profileService = {
   setup2fa: () => api.post('/profile/2fa/setup'),
   verify2fa: (data) => api.post('/profile/2fa/verify', data),
   disable2fa: (data) => api.delete('/profile/2fa', { data }),
+  listUsers: () => api.get('/profile/users'),
 };
 
 export const familyTreeService = {

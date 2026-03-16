@@ -169,4 +169,14 @@ router.delete('/2fa', apiLimiter, auth, async (req, res) => {
   }
 });
 
+// GET /api/profile/users — list all registered users (non-sensitive fields only)
+router.get('/users', apiLimiter, auth, async (req, res) => {
+  try {
+    const users = await User.find({}).select('_id username fullName').sort({ fullName: 1 });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
