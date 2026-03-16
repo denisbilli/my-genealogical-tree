@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import TreeView from './pages/TreeView';
+import Profile from './pages/Profile';
+import Trees from './pages/Trees';
 import { authService } from './services/api';
 
 function App() {
@@ -37,6 +39,22 @@ function App() {
               <TreeView />
             </PrivateRoute>
           } 
+        />
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/trees"
+          element={
+            <PrivateRoute>
+              <Trees />
+            </PrivateRoute>
+          }
         />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/tree" : "/login"} />} />
       </Routes>

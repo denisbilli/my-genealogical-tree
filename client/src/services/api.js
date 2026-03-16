@@ -32,6 +32,7 @@ api.interceptors.response.use(
 export const authService = {
   register: (userData) => api.post('/auth/register', userData),
   login: (credentials) => api.post('/auth/login', credentials),
+  verify2fa: (data) => api.post('/auth/2fa/verify', data),
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -45,8 +46,26 @@ export const authService = {
   }
 };
 
+export const profileService = {
+  get: () => api.get('/profile'),
+  update: (data) => api.put('/profile', data),
+  changePassword: (data) => api.put('/profile/password', data),
+  linkPerson: (data) => api.put('/profile/linked-person', data),
+  setup2fa: () => api.post('/profile/2fa/setup'),
+  verify2fa: (data) => api.post('/profile/2fa/verify', data),
+  disable2fa: (data) => api.delete('/profile/2fa', { data }),
+  listUsers: () => api.get('/profile/users'),
+};
+
+export const familyTreeService = {
+  getAll: () => api.get('/family-trees'),
+  create: (data) => api.post('/family-trees', data),
+  update: (id, data) => api.put(`/family-trees/${id}`, data),
+  delete: (id) => api.delete(`/family-trees/${id}`),
+};
+
 export const personService = {
-  getAll: () => api.get('/persons'),
+  getAll: (treeId) => api.get('/persons', { params: treeId ? { treeId } : {} }),
   getById: (id) => api.get(`/persons/${id}`),
   create: (personData) => {
     const formData = new FormData();
@@ -87,6 +106,7 @@ export const personService = {
   },
   addRelationship: (id, relationshipData) => 
     api.post(`/persons/${id}/relationship`, relationshipData),
+  linkUser: (id, linkedUserId) => api.put(`/persons/${id}/link-user`, { linkedUserId }),
   searchMatches: () => api.get('/persons/search/matches'),
   resetParams: () => api.post('/persons/reset'),
   repairTree: () => api.post('/tree/maintenance/repair-unions')

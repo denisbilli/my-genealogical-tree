@@ -6,6 +6,8 @@ const connectDB = require('./server/config/database');
 const authRoutes = require('./server/routes/auth');
 const personsRoutes = require('./server/routes/persons');
 const treeRoutes = require('./server/routes/tree');
+const profileRoutes = require('./server/routes/profile');
+const familyTreesRoutes = require('./server/routes/familyTrees');
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/persons', personsRoutes);
 app.use('/api/tree', treeRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/family-trees', familyTreesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
