@@ -480,7 +480,7 @@ router.get('/search/matches', auth, apiLimiter, async (req, res) => {
 });
 
 // PUT /api/persons/:id/link-user — link a real user account to a person
-router.put('/:id/link-user', auth, apiLimiter, async (req, res) => {
+router.put('/:id/link-user', apiLimiter, auth, async (req, res) => {
   try {
     const { linkedUserId } = req.body;
     const person = await Person.findOne({ _id: req.params.id, userId: req.userId });

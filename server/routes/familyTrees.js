@@ -7,7 +7,7 @@ const Union = require('../models/Union');
 const { apiLimiter } = require('../middleware/rateLimiter');
 
 // GET /api/family-trees — list all trees for the authenticated user
-router.get('/', auth, apiLimiter, async (req, res) => {
+router.get('/', apiLimiter, auth, async (req, res) => {
   try {
     const trees = await FamilyTree.find({ userId: req.userId }).sort({ createdAt: 1 });
     // Attach person count to each tree
@@ -24,7 +24,7 @@ router.get('/', auth, apiLimiter, async (req, res) => {
 });
 
 // POST /api/family-trees — create a new family tree
-router.post('/', auth, apiLimiter, async (req, res) => {
+router.post('/', apiLimiter, auth, async (req, res) => {
   try {
     const { name, description } = req.body;
     if (!name || !name.trim()) {
@@ -53,7 +53,7 @@ router.post('/', auth, apiLimiter, async (req, res) => {
 });
 
 // PUT /api/family-trees/:id — update a family tree
-router.put('/:id', auth, apiLimiter, async (req, res) => {
+router.put('/:id', apiLimiter, auth, async (req, res) => {
   try {
     const { name, description, isDefault } = req.body;
     const tree = await FamilyTree.findOne({ _id: req.params.id, userId: req.userId });
@@ -84,7 +84,7 @@ router.put('/:id', auth, apiLimiter, async (req, res) => {
 });
 
 // DELETE /api/family-trees/:id — delete a tree and all its persons/unions
-router.delete('/:id', auth, apiLimiter, async (req, res) => {
+router.delete('/:id', apiLimiter, auth, async (req, res) => {
   try {
     const tree = await FamilyTree.findOne({ _id: req.params.id, userId: req.userId });
     if (!tree) return res.status(404).json({ message: 'Tree not found' });

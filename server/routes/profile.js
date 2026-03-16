@@ -9,7 +9,7 @@ const Person = require('../models/Person');
 const { apiLimiter } = require('../middleware/rateLimiter');
 
 // GET /api/profile — get current user profile
-router.get('/', auth, apiLimiter, async (req, res) => {
+router.get('/', apiLimiter, auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select('-password -twoFactorSecret');
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -20,7 +20,7 @@ router.get('/', auth, apiLimiter, async (req, res) => {
 });
 
 // PUT /api/profile — update profile (fullName, email)
-router.put('/', auth, apiLimiter, async (req, res) => {
+router.put('/', apiLimiter, auth, async (req, res) => {
   try {
     const { fullName, email } = req.body;
     const updates = {};
@@ -39,7 +39,7 @@ router.put('/', auth, apiLimiter, async (req, res) => {
 });
 
 // PUT /api/profile/password — change password
-router.put('/password', auth, apiLimiter, async (req, res) => {
+router.put('/password', apiLimiter, auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -62,7 +62,7 @@ router.put('/password', auth, apiLimiter, async (req, res) => {
 });
 
 // PUT /api/profile/linked-person — link user to a person in the tree
-router.put('/linked-person', auth, apiLimiter, async (req, res) => {
+router.put('/linked-person', apiLimiter, auth, async (req, res) => {
   try {
     const { personId } = req.body;
     if (personId) {
@@ -91,7 +91,7 @@ router.put('/linked-person', auth, apiLimiter, async (req, res) => {
 });
 
 // POST /api/profile/2fa/setup — generate a TOTP secret and QR code
-router.post('/2fa/setup', auth, apiLimiter, async (req, res) => {
+router.post('/2fa/setup', apiLimiter, auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId);
     if (user.twoFactorEnabled) {
@@ -113,7 +113,7 @@ router.post('/2fa/setup', auth, apiLimiter, async (req, res) => {
 });
 
 // POST /api/profile/2fa/verify — verify TOTP and activate 2FA
-router.post('/2fa/verify', auth, apiLimiter, async (req, res) => {
+router.post('/2fa/verify', apiLimiter, auth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ message: 'TOTP token required' });
@@ -143,7 +143,7 @@ router.post('/2fa/verify', auth, apiLimiter, async (req, res) => {
 });
 
 // DELETE /api/profile/2fa — disable 2FA
-router.delete('/2fa', auth, apiLimiter, async (req, res) => {
+router.delete('/2fa', apiLimiter, auth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ message: 'TOTP token required to disable 2FA' });
