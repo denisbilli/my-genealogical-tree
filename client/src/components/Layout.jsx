@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TreeDeciduous, LogOut, Moon, Sun } from 'lucide-react';
+import { TreeDeciduous, LogOut, Moon, Sun, UserCircle, GitBranch } from 'lucide-react';
 import { authService } from '../services/api';
 
 function Layout({ children, title = 'Heritg.org', showBackButton = false, backButtonText = '', backButtonPath = '' }) {
@@ -54,6 +54,18 @@ function Layout({ children, title = 'Heritg.org', showBackButton = false, backBu
               {backButtonText}
             </button>
           )}
+
+          {/* Trees navigation */}
+          {user && (
+            <button
+              onClick={() => navigate('/trees')}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Family Trees"
+              style={{ backgroundColor: 'var(--bg-secondary)' }}
+            >
+              <GitBranch size={20} color="var(--primary)" />
+            </button>
+          )}
           
           {/* Dark Mode Toggle */}
           <button
@@ -67,9 +79,17 @@ function Layout({ children, title = 'Heritg.org', showBackButton = false, backBu
           
           {user && (
             <>
-              <span className="text-sm font-medium" style={{ color: 'var(--text-main)' }}>
-                Ciao, {user?.fullName || 'Utente'}
-              </span>
+              <button
+                onClick={() => navigate('/profile')}
+                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                title={`Profile: ${user?.fullName || 'User'}`}
+                style={{ backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', borderRadius: '20px' }}
+              >
+                <UserCircle size={20} color="var(--primary)" />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-main)' }}>
+                  {user?.fullName || 'Utente'}
+                </span>
+              </button>
               <button 
                 onClick={handleLogout} 
                 className="btn btn-danger p-2 rounded-full" 

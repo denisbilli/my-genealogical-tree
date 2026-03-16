@@ -25,6 +25,21 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Two-Factor Authentication
+  twoFactorSecret: {
+    type: String,
+    default: null
+  },
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  // Link to a person in any family tree
+  linkedPersonId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Person',
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

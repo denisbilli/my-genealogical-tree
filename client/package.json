@@ -15,6 +15,7 @@
     "axios": "^1.13.4",
     "d3": "^7.9.0",
     "lucide-react": "^0.563.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-d3-tree": "^3.6.6",
     "react-dom": "^19.2.4",

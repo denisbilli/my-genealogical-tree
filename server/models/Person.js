@@ -7,6 +7,19 @@ const personSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  // Optional: which family tree this person belongs to
+  treeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FamilyTree',
+    default: null,
+    index: true
+  },
+  // Optional: real user account linked to this person
+  linkedUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   firstName: {
     type: String,
     required: true,

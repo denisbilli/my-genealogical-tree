@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Plus, GitBranch } from 'lucide-react';
 import { personService } from '../services/api';
 import PersonModal from '../components/PersonModal';
 import Layout from '../components/Layout';
@@ -10,16 +10,27 @@ function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [matches, setMatches] = useState([]);
+  const [selectedTreeId, setSelectedTreeId] = useState(() => localStorage.getItem('selectedTreeId') || null);
+  const [selectedTreeName, setSelectedTreeName] = useState(() => localStorage.getItem('selectedTreeName') || null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Re-read tree selection whenever we navigate to this page
+  useEffect(() => {
+    const treeId = localStorage.getItem('selectedTreeId') || null;
+    const treeName = localStorage.getItem('selectedTreeName') || null;
+    setSelectedTreeId(treeId);
+    setSelectedTreeName(treeName);
+  }, [location]);
 
   useEffect(() => {
     loadPersons();
     loadMatches();
-  }, []);
+  }, [selectedTreeId]);
 
   const loadPersons = async () => {
     try {
-      const response = await personService.getAll();
+      const response = await personService.getAll(selectedTreeId);
       setPersons(response.data);
     } catch (error) {
       console.error('Error loading persons:', error);
@@ -101,7 +112,22 @@ function Dashboard() {
     <Layout title="Heritg.org" showBackButton={true} backButtonText="View Tree" backButtonPath="/tree">
       <div className="dashboard">
         <div className="dashboard-header">
-          <h2 style={{ color: 'var(--text-main)' }}>Family Members</h2>
+          <div>
+            <h2 style={{ color: 'var(--text-main)' }}>Family Members</h2>
+            {selectedTreeName && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', fontSize: '0.85rem', marginTop: '2px' }}>
+                <GitBranch size={14} />
+                <span>Tree: <strong>{selectedTreeName}</strong></span>
+                <button
+                  onClick={() => { localStorage.removeItem('selectedTreeId'); localStorage.removeItem('selectedTreeName'); navigate('/trees'); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }}
+                  title="Change tree"
+                >
+                  (change)
+                </button>
+              </div>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button 
                 className="btn" 

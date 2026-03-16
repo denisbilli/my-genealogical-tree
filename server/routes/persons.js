@@ -32,10 +32,12 @@ const upload = multer({
   }
 });
 
-// Get all persons for authenticated user
+// Get all persons for authenticated user (optional treeId filter via query param)
 router.get('/', auth, apiLimiter, async (req, res) => {
   try {
-    const persons = await Person.find({ userId: req.userId })
+    const query = { userId: req.userId };
+    if (req.query.treeId) query.treeId = req.query.treeId;
+    const persons = await Person.find(query)
       .populate('parents', 'firstName lastName')
       .populate('children', 'firstName lastName')
       .populate('spouse', 'firstName lastName');
@@ -472,6 +474,21 @@ router.get('/search/matches', auth, apiLimiter, async (req, res) => {
     }
 
     res.json(matches);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// PUT /api/persons/:id/link-user — link a real user account to a person
+router.put('/:id/link-user', auth, apiLimiter, async (req, res) => {
+  try {
+    const { linkedUserId } = req.body;
+    const person = await Person.findOne({ _id: req.params.id, userId: req.userId });
+    if (!person) return res.status(404).json({ message: 'Person not found' });
+
+    person.linkedUserId = linkedUserId || null;
+    await person.save();
+    res.json(person);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
