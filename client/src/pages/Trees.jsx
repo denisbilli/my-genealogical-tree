@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, GitBranch, CheckCircle, XCircle, Star } from 'lucide-react';
-import { familyTreeService } from '../services/api';
+import { Plus, Edit2, Trash2, GitBranch, CheckCircle, XCircle, Star, Users } from 'lucide-react';
+import { familyTreeService, personService } from '../services/api';
 import Layout from '../components/Layout';
 
 function Trees() {
@@ -12,6 +12,10 @@ function Trees() {
   const [showForm, setShowForm] = useState(false);
   const [editingTree, setEditingTree] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '' });
+  const [bulkImportTree, setBulkImportTree] = useState(null);
+  const [allPersons, setAllPersons] = useState([]);
+  const [selectedPersonIds, setSelectedPersonIds] = useState(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -81,6 +85,41 @@ function Trees() {
     localStorage.setItem('selectedTreeId', tree._id);
     localStorage.setItem('selectedTreeName', tree.name);
     navigate('/dashboard');
+  };
+
+  const handleOpenBulkImport = async (tree) => {
+    setBulkImportTree(tree);
+    setSelectedPersonIds(new Set());
+    try {
+      const res = await personService.getAll();
+      setAllPersons(res.data);
+    } catch {
+      showErr('Impossibile caricare le persone.');
+    }
+  };
+
+  const togglePersonSelect = (id) => {
+    setSelectedPersonIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedPersonIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const res = await familyTreeService.addPersons(bulkImportTree._id, Array.from(selectedPersonIds));
+      showMsg(`${res.data.modifiedCount} person${res.data.modifiedCount !== 1 ? 'e' : 'a'} assegnat${res.data.modifiedCount !== 1 ? 'e' : 'a'} all'albero.`);
+      setBulkImportTree(null);
+      loadTrees();
+    } catch (err) {
+      showErr(err.response?.data?.message || 'Operazione fallita.');
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   if (loading) {
@@ -193,6 +232,14 @@ function Trees() {
 
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button
+                    className="btn"
+                    onClick={() => handleOpenBulkImport(tree)}
+                    title="Assegna persone esistenti a questo albero"
+                    style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Users size={14} /> Add People
+                  </button>
+                  <button
                     className="btn btn-primary"
                     onClick={() => handleViewTree(tree)}
                     style={{ fontSize: '0.85rem' }}
@@ -233,6 +280,128 @@ function Trees() {
           </div>
         )}
       </div>
+
+      {/* Bulk Import Modal */}
+      {bulkImportTree && (() => {
+        const inThisTree = allPersons.filter(p => p.treeId && p.treeId === bulkImportTree._id);
+        const available = allPersons.filter(p => !p.treeId || p.treeId !== bulkImportTree._id);
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+          }}>
+            <div style={{
+              background: 'var(--card-bg)', borderRadius: '12px', padding: '1.5rem',
+              width: '100%', maxWidth: '560px', border: '1px solid var(--border-color)',
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '1rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Users size={20} color="var(--primary)" />
+                  Aggiungi persone a &ldquo;{bulkImportTree.name}&rdquo;
+                </h3>
+                <button
+                  onClick={() => setBulkImportTree(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1.2rem' }}
+                >&times;</button>
+              </div>
+
+              {available.length === 0 && inThisTree.length === 0 && (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nessuna persona trovata.</p>
+              )}
+
+              {available.length > 0 && (
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    Seleziona le persone da spostare in questo albero. Quelle già in un altro albero verranno riassegnate.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <button
+                      className="btn"
+                      style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', color: 'var(--text-main)' }}
+                      onClick={() => setSelectedPersonIds(new Set(available.map(p => p._id)))}
+                    >Seleziona tutti</button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', color: 'var(--text-main)' }}
+                      onClick={() => setSelectedPersonIds(new Set())}
+                    >Deseleziona tutti</button>
+                  </div>
+                  {available.map(person => {
+                    const checked = selectedPersonIds.has(person._id);
+                    const otherTree = person.treeId && person.treeId !== bulkImportTree._id;
+                    return (
+                      <label
+                        key={person._id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          padding: '8px 10px', borderRadius: '6px', cursor: 'pointer',
+                          background: checked ? 'rgba(var(--primary-rgb, 99,102,241), 0.08)' : 'transparent',
+                          border: `1px solid ${checked ? 'var(--primary)' : 'transparent'}`,
+                          marginBottom: '4px'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePersonSelect(person._id)}
+                          style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>
+                            {person.firstName} {person.lastName}
+                          </span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginLeft: '6px' }}>
+                            {person.gender} · {person.birthDate ? new Date(person.birthDate).getFullYear() : '?'}
+                          </span>
+                        </div>
+                        {otherTree && (
+                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', background: 'rgba(245,158,11,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                            In altro albero
+                          </span>
+                        )}
+                        {!person.treeId && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px' }}>
+                            Non assegnata
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {inThisTree.length > 0 && (
+                <details style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  <summary style={{ cursor: 'pointer', marginBottom: '4px' }}>
+                    {inThisTree.length} person{inThisTree.length !== 1 ? 'e' : 'a'} già in questo albero
+                  </summary>
+                  {inThisTree.map(p => (
+                    <div key={p._id} style={{ padding: '4px 8px', color: 'var(--text-secondary)' }}>
+                      ✓ {p.firstName} {p.lastName}
+                    </div>
+                  ))}
+                </details>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <button
+                  onClick={() => setBulkImportTree(null)}
+                  className="btn"
+                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)' }}
+                >Annulla</button>
+                <button
+                  onClick={handleBulkAssign}
+                  className="btn btn-primary"
+                  disabled={selectedPersonIds.size === 0 || bulkLoading}
+                >
+                  {bulkLoading ? 'Assegnando...' : `Assegna ${selectedPersonIds.size > 0 ? selectedPersonIds.size : ''} person${selectedPersonIds.size !== 1 ? 'e' : 'a'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </Layout>
   );
 }

@@ -62,6 +62,7 @@ export const familyTreeService = {
   create: (data) => api.post('/family-trees', data),
   update: (id, data) => api.put(`/family-trees/${id}`, data),
   delete: (id) => api.delete(`/family-trees/${id}`),
+  addPersons: (treeId, personIds) => api.put(`/family-trees/${treeId}/add-persons`, { personIds }),
 };
 
 export const personService = {

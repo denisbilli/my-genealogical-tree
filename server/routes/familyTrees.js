@@ -119,4 +119,25 @@ router.delete('/:id', apiLimiter, auth, async (req, res) => {
   }
 });
 
+// PUT /api/family-trees/:id/add-persons — bulk-assign persons to a tree
+router.put('/:id/add-persons', apiLimiter, auth, async (req, res) => {
+  try {
+    const { personIds } = req.body;
+    const tree = await FamilyTree.findOne({ _id: req.params.id, userId: req.userId });
+    if (!tree) return res.status(404).json({ message: 'Tree not found' });
+    if (!Array.isArray(personIds) || personIds.length === 0) {
+      return res.status(400).json({ message: 'personIds must be a non-empty array' });
+    }
+
+    // Only update persons owned by the current user (security check)
+    const result = await Person.updateMany(
+      { _id: { $in: personIds }, userId: req.userId },
+      { treeId: tree._id }
+    );
+    res.json({ message: 'Persons assigned successfully', modifiedCount: result.modifiedCount });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
